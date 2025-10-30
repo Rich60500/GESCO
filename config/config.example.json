@@ -1,0 +1,13 @@
+{
+  "axonaut": {
+    "api_key": "votre_clé_api_ici",
+    "user_id": "votre_user_id_ici",
+    "base_url": "https://api.axonaut.com/v2"
+  },
+  "app": {
+    "theme": "macos",
+    "language": "fr",
+    "auto_save": true,
+    "backup_enabled": true
+  }
+}
