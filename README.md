@@ -1,34 +1,24 @@
-# GESCO - Gestion de Chantiers v4.8.0
+# GESCO v5.0 - Gestion de Chantiers
 
-Application de gestion complète pour les chantiers de construction, développée en Python avec PySide6.
+⚡️ Application moderne de gestion de chantiers avec interface macOS Sonoma/Sequoia
 
-## 📋 Fonctionnalités principales
+## 🎯 Étape 1 : Fondations
 
-### Module Chantier (v4.8.0)
-- Interface à deux volets : liste des chantiers + détails
-- Recherche et filtrage des chantiers
-- Indicateurs de suivi en temps réel :
-  - Jours ouvrés estimés vs. réels
-  - Budget chiffré vs. factures
-  - Achats estimés vs. réalisés
-- Barres de progression colorées
-- Alertes de dépassement
+Cette version initiale comprend :
+- ✅ Application principale avec menu moderne et sidebar
+- ✅ Module Chantiers complet avec CRUD
+- ✅ Base de données SQLite pour la persistance
+- ✅ Design System moderne inspiré de macOS
+- ✅ Interface responsive avec tous les champs toujours visibles
 
-### Autres modules
-- **Achats** : Gestion des achats et approvisionnements
-- **Main d'œuvre** : Suivi des heures et coûts par technicien
-- **Tiers** : Gestion des contacts clients et fournisseurs
-- **Factures** : Intégration avec l'API Axonaut
-- **Archives** : Accès aux chantiers clôturés
-- **Paramètres** : Configuration et gestion des techniciens
-
-## 🚀 Installation
+## 🚀 Démarrage Rapide
 
 ### Prérequis
+
 - Python 3.8 ou supérieur
 - pip (gestionnaire de paquets Python)
 
-### Étapes d'installation
+### Installation
 
 1. **Cloner le dépôt**
 ```bash
@@ -36,88 +26,148 @@ git clone https://github.com/Rich60500/GESCO.git
 cd GESCO
 ```
 
-2. **Créer un environnement virtuel** (recommandé)
+2. **Créer un environnement virtuel (recommandé)**
 ```bash
 python -m venv venv
+
+# Windows
+venv\Scripts\activate
+
+# macOS/Linux
+source venv/bin/activate
 ```
 
-3. **Activer l'environnement virtuel**
-   - Windows :
-     ```bash
-     venv\Scripts\activate
-     ```
-   - macOS/Linux :
-     ```bash
-     source venv/bin/activate
-     ```
-
-4. **Installer les dépendances**
+3. **Installer les dépendances**
 ```bash
 pip install -r requirements.txt
 ```
 
-## ▶️ Démarrage
-
 ### Lancer l'application
+
 ```bash
-python gesco_v4_8_0_MODULE_CHANTIER_FINAL.py
+python src/main.py
 ```
 
-## 📁 Structure du projet
+## 📁 Structure du Projet
 
 ```
 GESCO/
-├── gesco_v4_8_0_MODULE_CHANTIER_FINAL.py  # Application principale
-├── requirements.txt                        # Dépendances Python
-├── data/                                   # Données de l'application (fichiers .pkl)
-├── config/                                 # Configuration (API Axonaut, etc.)
-├── docs/                                   # Documentation
-└── README.md                               # Ce fichier
+├── src/
+│   ├── main.py              # Application principale
+│   ├── design_system.py     # Système de design moderne
+│   ├── database.py          # Gestionnaire SQLite
+│   └── modules/
+│       └── chantiers.py     # Module Chantiers
+├── data/                    # Base de données SQLite (créé automatiquement)
+├── config/                  # Configuration (future)
+├── requirements.txt         # Dépendances Python
+└── README.md
 ```
 
-## 🔧 Configuration
+## ✨ Fonctionnalités du Module Chantiers
 
-### API Axonaut
-Pour utiliser l'intégration de facturation Axonaut :
-1. Créez un fichier `config/config.json`
-2. Ajoutez vos identifiants API :
-```json
-{
-  "axonaut": {
-    "api_key": "votre_clé_api",
-    "user_id": "votre_user_id"
-  }
-}
-```
+### Interface en 2 panneaux
 
-## 💾 Données
+- **Panneau gauche** : Liste de tous les chantiers
+  - Affichage : Nom, N° Commande, Client, Date d'ouverture
+  - Recherche en temps réel
+  - Tri automatique (chantiers clôturés en fin de liste)
+  - Indicateur coloré selon l'état
 
-L'application stocke ses données dans des fichiers pickle (`.pkl`) dans le dossier `data/` :
-- `chantiers.pkl` : Liste des chantiers
-- `achats.pkl` : Achats et approvisionnements
-- `heures.pkl` : Heures de main d'œuvre
-- `contacts.pkl` : Contacts tiers
-- `techniciens.pkl` : Liste des techniciens
+- **Panneau droit** : Détails du chantier sélectionné
+  - Informations complètes
+  - Changement d'état direct via ComboBox
+  - Calcul automatique de l'écart budgétaire
 
-## 🎨 Interface
+### Gestion complète (CRUD)
 
-Interface moderne avec design macOS :
-- Fond gris doux
-- Coins arrondis
-- Couleurs pastel (#007AFF bleu, #34C759 vert, #FF3B30 rouge)
-- Menu latéral avec icônes SVG personnalisées
-- Tableaux interactifs avec tri et redimensionnement
+- **Créer** un nouveau chantier
+- **Lire** les détails d'un chantier
+- **Modifier** un chantier existant
+- **Supprimer** un chantier
 
-## 📝 Version
+### États des chantiers
 
-**Version actuelle : 4.8.0**
+- 🔵 **Accepté** - Nouveau chantier accepté
+- 🟠 **En cours** - Travaux en cours
+- 🟢 **Terminé** - Travaux terminés
+- 🟣 **Facturé** - Facture émise
+- ⚫ **Clôturé** - Chantier archivé (en fin de liste)
 
-Voir l'en-tête du fichier principal pour l'historique complet des versions.
+### Données gérées
 
-## 🤝 Contribution
+- Nom du chantier
+- Numéro de commande
+- Client
+- Adresse complète (adresse, code postal, ville)
+- Contact (téléphone, email)
+- Dates (ouverture, clôture)
+- Budget (prévisionnel, réel, écart calculé)
+- Notes et remarques
 
-Les contributions sont les bienvenues ! N'hésitez pas à ouvrir une issue ou une pull request.
+## 🎨 Design System
 
-## 📄 Licence
+Le design s'inspire de macOS Sonoma/Sequoia :
 
-Voir le fichier LICENSE pour plus de détails.
+- **Typographie** : SF Pro Text
+- **Couleurs** : Palette Apple (#007AFF, #34C759, #FF3B30, etc.)
+- **Espacement** : Système 4pt
+- **Coins arrondis** : 8-16px
+- **Ombres subtiles** : Style Apple
+- **Interface fluide** : Animations douces
+
+## 🗄️ Base de Données
+
+### SQLite
+
+Les données sont stockées dans `data/gesco.db` (créé automatiquement).
+
+**Table chantiers** :
+- Informations générales (nom, client, n° commande)
+- Localisation (adresse, CP, ville)
+- Contact (téléphone, email)
+- Dates (ouverture, clôture)
+- État et budgets
+- Métadonnées (created_at, updated_at)
+
+**Index** pour performances :
+- État
+- Client
+- Numéro de commande
+
+## 🔄 Responsive Design
+
+- Interface adaptative avec `QScrollArea`
+- Tous les champs toujours visibles
+- Défilement automatique si nécessaire
+- Dialogues responsive pour tous les écrans
+
+## 🛠️ Technologies
+
+- **PySide6** : Framework Qt pour Python
+- **SQLite** : Base de données légère et performante
+- **Python 3.8+** : Langage moderne et efficace
+
+## 📝 Modules à Venir
+
+Les modules suivants seront développés dans les prochaines étapes :
+
+- 🛒 **Achats** : Gestion des achats et integration Sonepar API
+- 👷 **Main d'œuvre** : Gestion du personnel et des heures
+- 👥 **Tiers** : Gestion des clients et fournisseurs
+- 💰 **Factures** : Facturation et comptabilité
+- 📦 **Archives** : Consultation des données historiques
+- ⚙️ **Paramètres** : Configuration de l'application
+
+## 🐛 Signaler un Problème
+
+Ouvrez une issue sur GitHub : https://github.com/Rich60500/GESCO/issues
+
+## 📜 Licence
+
+Voir le fichier [LICENSE](LICENSE) pour plus de détails.
+
+---
+
+**Version actuelle** : v5.0 - Étape 1 (Fondations)
+**Dernière mise à jour** : 2025-11-26
