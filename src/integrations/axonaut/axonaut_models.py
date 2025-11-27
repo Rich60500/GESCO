@@ -18,7 +18,7 @@ class BusinessManager:
     @classmethod
     def from_dict(cls, data: dict) -> 'BusinessManager':
         """Crée une instance depuis un dictionnaire"""
-        if not data:
+        if not data or not isinstance(data, dict):
             return cls()
         return cls(
             id=data.get('id'),
@@ -44,7 +44,7 @@ class Category:
     @classmethod
     def from_dict(cls, data: dict) -> 'Category':
         """Crée une instance depuis un dictionnaire"""
-        if not data:
+        if not data or not isinstance(data, dict):
             return cls()
         return cls(
             id=data.get('id'),
@@ -78,7 +78,7 @@ class Address:
     @classmethod
     def from_dict(cls, data: dict) -> 'Address':
         """Crée une instance depuis un dictionnaire"""
-        if not data:
+        if not data or not isinstance(data, dict):
             return cls()
         return cls(
             id=data.get('id'),
@@ -170,6 +170,8 @@ class Employee:
     @classmethod
     def from_dict(cls, data: dict) -> 'Employee':
         """Crée une instance depuis un dictionnaire"""
+        if not data or not isinstance(data, dict):
+            return cls()
         return cls(
             id=data.get('id'),
             gender=data.get('gender'),
@@ -265,16 +267,24 @@ class Company:
         # Business manager
         business_manager = None
         if data.get('business_manager'):
-            business_manager = BusinessManager.from_dict(data['business_manager'])
+            bm_data = data['business_manager']
+            if isinstance(bm_data, dict):
+                business_manager = BusinessManager.from_dict(bm_data)
 
         # Categories
         categories = None
         if data.get('categories'):
-            categories = Category.from_dict(data['categories'])
+            cat_data = data['categories']
+            # L'API peut retourner un dict ou une liste
+            if isinstance(cat_data, dict):
+                categories = Category.from_dict(cat_data)
+            elif isinstance(cat_data, list) and len(cat_data) > 0:
+                # Prendre la première catégorie si c'est une liste
+                categories = Category.from_dict(cat_data[0])
 
         # Employees
         employees = []
-        if data.get('employees'):
+        if data.get('employees') and isinstance(data['employees'], list):
             employees = [Employee.from_dict(emp) for emp in data['employees']]
 
         return cls(
