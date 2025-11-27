@@ -114,10 +114,14 @@ class ModernSidebar(QFrame):
         self.buttons.append(btn_achats)
         layout.addWidget(btn_achats)
 
+        # Module Tiers (actif)
+        btn_tiers = SidebarButton("Tiers", "👥")
+        self.buttons.append(btn_tiers)
+        layout.addWidget(btn_tiers)
+
         # Modules à venir (désactivés)
         modules_a_venir = [
             ("Main d'œuvre", "👷"),
-            ("Tiers", "👥"),
             ("Factures", "💰"),
             ("Archives", "📦"),
             ("Paramètres", "⚙️")
@@ -138,7 +142,7 @@ class ModernSidebar(QFrame):
         layout.addStretch()
 
         # Footer avec info
-        footer_label = ModernLabel("Étape 2: Achats", "secondary")
+        footer_label = ModernLabel("Étape 3: Tiers", "secondary")
         footer_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         footer_label.setWordWrap(True)
         layout.addWidget(footer_label)
@@ -224,8 +228,18 @@ class MainWindow(QMainWindow):
             placeholder = PlaceholderWidget("Achats")
             self.content_stack.addWidget(placeholder)
 
+        # Importer et ajouter le module Tiers
+        try:
+            from modules.tiers import TiersModule
+            self.module_tiers = TiersModule()
+            self.content_stack.addWidget(self.module_tiers)
+        except ImportError as e:
+            # Si le module n'est pas encore créé, afficher un placeholder
+            placeholder = PlaceholderWidget("Tiers")
+            self.content_stack.addWidget(placeholder)
+
         # Ajouter des placeholders pour les autres modules
-        modules = ["Main d'œuvre", "Tiers", "Factures", "Archives", "Paramètres"]
+        modules = ["Main d'œuvre", "Factures", "Archives", "Paramètres"]
         for module in modules:
             placeholder = PlaceholderWidget(module)
             self.content_stack.addWidget(placeholder)
