@@ -100,7 +100,7 @@ class TiersModule(QWidget):
                 background-color: {DesignSystem.SURFACE};
                 border: none;
                 border-radius: {DesignSystem.RADIUS_MD}px;
-                gridline-color: {DesignSystem.BORDER};
+                gridline-color: {DesignSystem.BORDER_COLOR};
             }}
             QTableWidget::item {{
                 padding: {DesignSystem.SPACING_SM}px;
@@ -114,7 +114,7 @@ class TiersModule(QWidget):
                 background-color: {DesignSystem.SURFACE_ELEVATED};
                 padding: {DesignSystem.SPACING_MD}px;
                 border: none;
-                border-bottom: 1px solid {DesignSystem.BORDER};
+                border-bottom: 1px solid {DesignSystem.BORDER_COLOR};
                 font-weight: 600;
                 font-family: {DesignSystem.FONT_FAMILY};
                 font-size: {DesignSystem.FONT_SIZE_BODY}px;
@@ -712,7 +712,7 @@ class ContactsDialog(ResponsiveDialog):
                 background-color: {DesignSystem.SURFACE};
                 border: none;
                 border-radius: {DesignSystem.RADIUS_MD}px;
-                gridline-color: {DesignSystem.BORDER};
+                gridline-color: {DesignSystem.BORDER_COLOR};
             }}
             QTableWidget::item {{
                 padding: {DesignSystem.SPACING_SM}px;
@@ -722,7 +722,7 @@ class ContactsDialog(ResponsiveDialog):
                 background-color: {DesignSystem.SURFACE_ELEVATED};
                 padding: {DesignSystem.SPACING_MD}px;
                 border: none;
-                border-bottom: 1px solid {DesignSystem.BORDER};
+                border-bottom: 1px solid {DesignSystem.BORDER_COLOR};
                 font-weight: 600;
             }}
         """)
@@ -1065,7 +1065,7 @@ class AddressesDialog(ResponsiveDialog):
                 background-color: {DesignSystem.SURFACE};
                 border: none;
                 border-radius: {DesignSystem.RADIUS_MD}px;
-                gridline-color: {DesignSystem.BORDER};
+                gridline-color: {DesignSystem.BORDER_COLOR};
             }}
             QTableWidget::item {{
                 padding: {DesignSystem.SPACING_SM}px;
@@ -1075,7 +1075,7 @@ class AddressesDialog(ResponsiveDialog):
                 background-color: {DesignSystem.SURFACE_ELEVATED};
                 padding: {DesignSystem.SPACING_MD}px;
                 border: none;
-                border-bottom: 1px solid {DesignSystem.BORDER};
+                border-bottom: 1px solid {DesignSystem.BORDER_COLOR};
                 font-weight: 600;
             }}
         """)
