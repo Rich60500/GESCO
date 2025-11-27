@@ -105,7 +105,7 @@ class ModernLabel(QLabel):
 
 
 class ModernInput(QLineEdit):
-    """Champ de saisie moderne style macOS"""
+    """Champ de saisie moderne style macOS - sans bordures visibles"""
 
     def __init__(self, placeholder="", parent=None):
         super().__init__(parent)
@@ -114,42 +114,50 @@ class ModernInput(QLineEdit):
 
         self.setStyleSheet(f"""
             QLineEdit {{
-                background-color: {DesignSystem.SURFACE};
-                border: 1px solid {DesignSystem.BORDER_COLOR};
+                background-color: {DesignSystem.SURFACE_ELEVATED};
+                border: none;
                 border-radius: {DesignSystem.RADIUS_SM}px;
                 padding: 0 {DesignSystem.SPACING_MD}px;
                 font-family: {DesignSystem.FONT_FAMILY};
                 font-size: {DesignSystem.FONT_SIZE_BODY}px;
                 color: {DesignSystem.TEXT_PRIMARY};
             }}
+            QLineEdit:hover {{
+                background-color: #F0F0F2;
+            }}
             QLineEdit:focus {{
+                background-color: {DesignSystem.SURFACE};
                 border: 2px solid {DesignSystem.ACCENT_BLUE};
                 padding: 0 {DesignSystem.SPACING_MD - 1}px;
             }}
             QLineEdit:disabled {{
                 background-color: {DesignSystem.SURFACE_ELEVATED};
-                color: {DesignSystem.TEXT_SECONDARY};
+                color: {DesignSystem.TEXT_TERTIARY};
             }}
         """)
 
 
 class ModernTextEdit(QTextEdit):
-    """Zone de texte multiligne moderne"""
+    """Zone de texte multiligne moderne - sans bordures visibles"""
 
     def __init__(self, parent=None):
         super().__init__(parent)
 
         self.setStyleSheet(f"""
             QTextEdit {{
-                background-color: {DesignSystem.SURFACE};
-                border: 1px solid {DesignSystem.BORDER_COLOR};
+                background-color: {DesignSystem.SURFACE_ELEVATED};
+                border: none;
                 border-radius: {DesignSystem.RADIUS_SM}px;
                 padding: {DesignSystem.SPACING_SM}px;
                 font-family: {DesignSystem.FONT_FAMILY};
                 font-size: {DesignSystem.FONT_SIZE_BODY}px;
                 color: {DesignSystem.TEXT_PRIMARY};
             }}
+            QTextEdit:hover {{
+                background-color: #F0F0F2;
+            }}
             QTextEdit:focus {{
+                background-color: {DesignSystem.SURFACE};
                 border: 2px solid {DesignSystem.ACCENT_BLUE};
                 padding: {DesignSystem.SPACING_SM - 1}px;
             }}
@@ -157,7 +165,7 @@ class ModernTextEdit(QTextEdit):
 
 
 class ModernComboBox(QComboBox):
-    """Liste déroulante moderne style macOS"""
+    """Liste déroulante moderne style macOS - sans bordures visibles"""
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -165,20 +173,25 @@ class ModernComboBox(QComboBox):
 
         self.setStyleSheet(f"""
             QComboBox {{
-                background-color: {DesignSystem.SURFACE};
-                border: 1px solid {DesignSystem.BORDER_COLOR};
+                background-color: {DesignSystem.SURFACE_ELEVATED};
+                border: none;
                 border-radius: {DesignSystem.RADIUS_SM}px;
                 padding: 0 {DesignSystem.SPACING_MD}px;
                 font-family: {DesignSystem.FONT_FAMILY};
                 font-size: {DesignSystem.FONT_SIZE_BODY}px;
                 color: {DesignSystem.TEXT_PRIMARY};
             }}
+            QComboBox:hover {{
+                background-color: #F0F0F2;
+            }}
             QComboBox:focus {{
+                background-color: {DesignSystem.SURFACE};
                 border: 2px solid {DesignSystem.ACCENT_BLUE};
+                padding: 0 {DesignSystem.SPACING_MD - 1}px;
             }}
             QComboBox::drop-down {{
                 border: none;
-                width: 20px;
+                width: 24px;
             }}
             QComboBox::down-arrow {{
                 image: none;
@@ -189,11 +202,12 @@ class ModernComboBox(QComboBox):
             }}
             QComboBox QAbstractItemView {{
                 background-color: {DesignSystem.SURFACE};
-                border: 1px solid {DesignSystem.BORDER_COLOR};
-                border-radius: {DesignSystem.RADIUS_SM}px;
+                border: none;
+                border-radius: {DesignSystem.RADIUS_MD}px;
                 selection-background-color: {DesignSystem.ACCENT_BLUE};
                 selection-color: white;
                 padding: 4px;
+                outline: none;
             }}
         """)
 
