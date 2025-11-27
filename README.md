@@ -2,14 +2,24 @@
 
 ⚡️ Application moderne de gestion de chantiers avec interface macOS Sonoma/Sequoia
 
-## 🎯 Étape 1 : Fondations
+## 🎯 Version Actuelle : Étape 2 - Achats & Sonepar
 
-Cette version initiale comprend :
+### Étape 1 : Fondations ✅
 - ✅ Application principale avec menu moderne et sidebar
 - ✅ Module Chantiers complet avec CRUD
 - ✅ Base de données SQLite pour la persistance
 - ✅ Design System moderne inspiré de macOS
 - ✅ Interface responsive avec tous les champs toujours visibles
+
+### Étape 2 : Achats & Intégration Sonepar ✅
+- ✅ Module Achats complet avec interface à onglets
+- ✅ Intégration complète de l'API Sonepar (fournisseur électrique)
+- ✅ Recherche de produits dans le catalogue Sonepar
+- ✅ Consultation des prix et stocks en temps réel
+- ✅ Création de commandes liées aux chantiers
+- ✅ Historique des commandes par chantier
+- ✅ Rate limiting automatique pour respecter les limites API
+- ✅ Gestion des bons de livraison
 
 ## 🚀 Démarrage Rapide
 
@@ -53,14 +63,21 @@ python src/main.py
 ```
 GESCO/
 ├── src/
-│   ├── main.py              # Application principale
-│   ├── design_system.py     # Système de design moderne
-│   ├── database.py          # Gestionnaire SQLite
-│   └── modules/
-│       └── chantiers.py     # Module Chantiers
-├── data/                    # Base de données SQLite (créé automatiquement)
-├── config/                  # Configuration (future)
-├── requirements.txt         # Dépendances Python
+│   ├── main.py                      # Application principale
+│   ├── design_system.py             # Système de design moderne
+│   ├── database.py                  # Gestionnaire SQLite
+│   ├── modules/
+│   │   ├── chantiers.py             # Module Chantiers
+│   │   └── achats.py                # Module Achats
+│   └── integrations/
+│       └── sonepar/
+│           ├── sonepar_models.py    # Modèles de données Sonepar
+│           ├── sonepar_config.py    # Configuration API
+│           ├── sonepar_client.py    # Client HTTP avec rate limiting
+│           └── sonepar_database.py  # Liaison chantiers/commandes
+├── data/                            # Base de données SQLite (créé automatiquement)
+├── config/                          # Configuration (future)
+├── requirements.txt                 # Dépendances Python
 └── README.md
 ```
 
@@ -104,6 +121,84 @@ GESCO/
 - Dates (ouverture, clôture)
 - Budget (prévisionnel, réel, écart calculé)
 - Notes et remarques
+
+## 🛒 Fonctionnalités du Module Achats
+
+### Intégration Sonepar API
+
+Le module Achats s'intègre avec l'API Sonepar (fournisseur électrique) pour gérer les achats de matériel électrique directement liés aux chantiers.
+
+**Identifiants API** :
+- Client : DENIS EURL (API Key: 95791076)
+- Code client : 4146EB1
+- Organisation : 5QD
+- Environnements : Test & Production
+
+### Interface à 3 onglets
+
+#### 1. 🔍 Catalogue Sonepar
+- **Recherche de produits** : Par référence, EAN ou description
+- **Affichage des résultats** :
+  - Référence produit
+  - Description complète
+  - Marque
+  - Code EAN
+  - Conditionnement et unité
+- **Consultation prix & stock** :
+  - Prix net et brut
+  - Taux de remise
+  - Stock disponible
+  - Type de stock (disponible, réservé, en commande)
+  - Emplacement
+
+#### 2. 📦 Commandes
+- **Création de commandes** :
+  - Sélection du chantier
+  - Type de commande (Standard, Express, Dépôt)
+  - Ajout de lignes de commande (référence + quantité)
+  - Adresse de livraison optionnelle
+  - Notes
+- **Liste des commandes** :
+  - Filtrage par chantier
+  - Affichage : N° commande, Date, Chantier, Montant, Statut
+  - Statuts colorés selon l'état
+- **Liaison automatique** : Chaque commande est liée à un chantier GESCO
+
+#### 3. 🚚 Livraisons
+- **Suivi des bons de livraison**
+- **Historique des livraisons par chantier**
+- **Informations transporteur et tracking**
+
+### Rate Limiting Automatique
+
+Le client API respecte automatiquement les limites d'appels :
+- **Général** : 10 appels par minute
+- **Catalogue** : 5 appels par seconde
+- **Retry automatique** : En cas d'échec avec backoff exponentiel (max 3 tentatives)
+
+### Base de Données Intégrée
+
+**Tables Sonepar** :
+- `chantier_orders` : Commandes liées aux chantiers
+- `chantier_products` : Produits commandés par chantier
+- `chantier_delivery_notes` : Bons de livraison
+
+**Fonctionnalités** :
+- Statistiques d'achats par chantier
+- Recherche de produits commandés
+- Historique complet des commandes
+- Liaison commandes ↔ chantiers ↔ livraisons
+
+### Modèles de Données
+
+Le système utilise des dataclasses Python pour une gestion typée :
+- `Brand` : Marques de produits
+- `Product` : Produits du catalogue
+- `ProductWithPricing` : Produit avec prix et stock
+- `Order` : Commandes avec lignes
+- `OrderLine` : Ligne de commande individuelle
+- `DeliveryNote` : Bon de livraison
+- Enums : `ProductStatus`, `OrderType`, `StockType`, `OrderStatus`
 
 ## 🎨 Design System
 

@@ -109,9 +109,13 @@ class ModernSidebar(QFrame):
         self.buttons.append(btn_chantiers)
         layout.addWidget(btn_chantiers)
 
+        # Module Achats (actif)
+        btn_achats = SidebarButton("Achats", "🛒")
+        self.buttons.append(btn_achats)
+        layout.addWidget(btn_achats)
+
         # Modules à venir (désactivés)
         modules_a_venir = [
-            ("Achats", "🛒"),
             ("Main d'œuvre", "👷"),
             ("Tiers", "👥"),
             ("Factures", "💰"),
@@ -134,7 +138,7 @@ class ModernSidebar(QFrame):
         layout.addStretch()
 
         # Footer avec info
-        footer_label = ModernLabel("Étape 1: Fondations", "secondary")
+        footer_label = ModernLabel("Étape 2: Achats", "secondary")
         footer_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         footer_label.setWordWrap(True)
         layout.addWidget(footer_label)
@@ -210,8 +214,18 @@ class MainWindow(QMainWindow):
             placeholder = PlaceholderWidget("Chantiers")
             self.content_stack.addWidget(placeholder)
 
+        # Importer et ajouter le module Achats
+        try:
+            from modules.achats import ModuleAchats
+            self.module_achats = ModuleAchats(self.db)
+            self.content_stack.addWidget(self.module_achats)
+        except ImportError as e:
+            # Si le module n'est pas encore créé, afficher un placeholder
+            placeholder = PlaceholderWidget("Achats")
+            self.content_stack.addWidget(placeholder)
+
         # Ajouter des placeholders pour les autres modules
-        modules = ["Achats", "Main d'œuvre", "Tiers", "Factures", "Archives", "Paramètres"]
+        modules = ["Main d'œuvre", "Tiers", "Factures", "Archives", "Paramètres"]
         for module in modules:
             placeholder = PlaceholderWidget(module)
             self.content_stack.addWidget(placeholder)
