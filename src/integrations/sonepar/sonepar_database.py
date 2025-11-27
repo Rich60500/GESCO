@@ -40,6 +40,34 @@ class SoneParDatabase:
         conn = self._get_connection()
         cursor = conn.cursor()
 
+        # Table du catalogue de produits Sonepar (cache local)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS sonepar_products (
+                id TEXT PRIMARY KEY,
+                ean TEXT,
+                reference TEXT,
+                description TEXT,
+                brand TEXT,
+                brand_id TEXT,
+                unit_price REAL,
+                stock_available INTEGER,
+                status TEXT,
+                image_url TEXT,
+                technical_specs TEXT,
+                last_updated TEXT NOT NULL,
+                UNIQUE(id)
+            )
+        """)
+
+        # Table des métadonnées de synchronisation
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS sonepar_sync_metadata (
+                key TEXT PRIMARY KEY,
+                value TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )
+        """)
+
         # Table des commandes Sonepar liées aux chantiers
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS chantier_orders (
@@ -95,6 +123,26 @@ class SoneParDatabase:
 
         # Index pour les recherches fréquentes
         cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_sonepar_products_ean
+            ON sonepar_products(ean)
+        """)
+
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_sonepar_products_reference
+            ON sonepar_products(reference)
+        """)
+
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_sonepar_products_description
+            ON sonepar_products(description)
+        """)
+
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_sonepar_products_brand
+            ON sonepar_products(brand_id)
+        """)
+
+        cursor.execute("""
             CREATE INDEX IF NOT EXISTS idx_chantier_orders_chantier
             ON chantier_orders(chantier_id)
         """)
@@ -116,6 +164,215 @@ class SoneParDatabase:
 
         conn.commit()
         conn.close()
+
+    # === GESTION DU CATALOGUE PRODUITS ===
+
+    def save_products(self, products: List[Dict[str, Any]]) -> int:
+        """
+        Sauvegarde une liste de produits dans le catalogue local
+
+        Args:
+            products: Liste de produits à sauvegarder
+
+        Returns:
+            Nombre de produits sauvegardés
+        """
+        conn = self._get_connection()
+        cursor = conn.cursor()
+
+        now = datetime.now().isoformat()
+        count = 0
+
+        for product in products:
+            try:
+                cursor.execute("""
+                    INSERT OR REPLACE INTO sonepar_products (
+                        id, ean, reference, description, brand, brand_id,
+                        unit_price, stock_available, status, image_url,
+                        technical_specs, last_updated
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (
+                    product.get('id', ''),
+                    product.get('ean', ''),
+                    product.get('reference', ''),
+                    product.get('description', ''),
+                    product.get('brand', ''),
+                    product.get('brand_id', ''),
+                    product.get('unit_price', 0.0),
+                    product.get('stock_available', 0),
+                    product.get('status', 'UNKNOWN'),
+                    product.get('image_url', ''),
+                    product.get('technical_specs', ''),
+                    now
+                ))
+                count += 1
+            except Exception as e:
+                print(f"Erreur lors de la sauvegarde du produit {product.get('id')}: {e}")
+                continue
+
+        conn.commit()
+        conn.close()
+
+        return count
+
+    def search_products(
+        self,
+        query: str,
+        brand_id: Optional[str] = None,
+        limit: int = 100
+    ) -> List[Dict[str, Any]]:
+        """
+        Recherche rapide dans le catalogue local via SQL
+
+        Args:
+            query: Terme de recherche (EAN, référence, description)
+            brand_id: Filtre par marque (optionnel)
+            limit: Nombre maximum de résultats
+
+        Returns:
+            Liste de produits correspondants
+        """
+        conn = self._get_connection()
+        cursor = conn.cursor()
+
+        query_pattern = f'%{query}%'
+
+        if brand_id:
+            cursor.execute("""
+                SELECT * FROM sonepar_products
+                WHERE brand_id = ?
+                AND (
+                    ean LIKE ? OR
+                    reference LIKE ? OR
+                    description LIKE ? OR
+                    id LIKE ?
+                )
+                ORDER BY
+                    CASE
+                        WHEN ean = ? THEN 1
+                        WHEN reference = ? THEN 2
+                        WHEN id = ? THEN 3
+                        ELSE 4
+                    END,
+                    description
+                LIMIT ?
+            """, (
+                brand_id,
+                query_pattern, query_pattern, query_pattern, query_pattern,
+                query, query, query,
+                limit
+            ))
+        else:
+            cursor.execute("""
+                SELECT * FROM sonepar_products
+                WHERE
+                    ean LIKE ? OR
+                    reference LIKE ? OR
+                    description LIKE ? OR
+                    id LIKE ?
+                ORDER BY
+                    CASE
+                        WHEN ean = ? THEN 1
+                        WHEN reference = ? THEN 2
+                        WHEN id = ? THEN 3
+                        ELSE 4
+                    END,
+                    description
+                LIMIT ?
+            """, (
+                query_pattern, query_pattern, query_pattern, query_pattern,
+                query, query, query,
+                limit
+            ))
+
+        rows = cursor.fetchall()
+        conn.close()
+
+        return [dict(row) for row in rows]
+
+    def get_product_count(self) -> int:
+        """
+        Retourne le nombre de produits dans le catalogue local
+
+        Returns:
+            Nombre de produits
+        """
+        conn = self._get_connection()
+        cursor = conn.cursor()
+
+        cursor.execute("SELECT COUNT(*) as count FROM sonepar_products")
+        count = cursor.fetchone()['count']
+
+        conn.close()
+        return count
+
+    def get_sync_metadata(self, key: str) -> Optional[str]:
+        """
+        Récupère une métadonnée de synchronisation
+
+        Args:
+            key: Clé de la métadonnée
+
+        Returns:
+            Valeur ou None
+        """
+        conn = self._get_connection()
+        cursor = conn.cursor()
+
+        cursor.execute("""
+            SELECT value FROM sonepar_sync_metadata
+            WHERE key = ?
+        """, (key,))
+
+        row = cursor.fetchone()
+        conn.close()
+
+        return row['value'] if row else None
+
+    def set_sync_metadata(self, key: str, value: str):
+        """
+        Enregistre une métadonnée de synchronisation
+
+        Args:
+            key: Clé de la métadonnée
+            value: Valeur à enregistrer
+        """
+        conn = self._get_connection()
+        cursor = conn.cursor()
+
+        now = datetime.now().isoformat()
+
+        cursor.execute("""
+            INSERT OR REPLACE INTO sonepar_sync_metadata (key, value, updated_at)
+            VALUES (?, ?, ?)
+        """, (key, value, now))
+
+        conn.commit()
+        conn.close()
+
+    def get_last_sync_date(self) -> Optional[datetime]:
+        """
+        Retourne la date de la dernière synchronisation du catalogue
+
+        Returns:
+            Date de dernière sync ou None
+        """
+        last_sync = self.get_sync_metadata('last_catalog_sync')
+        if last_sync:
+            try:
+                return datetime.fromisoformat(last_sync)
+            except:
+                return None
+        return None
+
+    def set_last_sync_date(self, sync_date: datetime):
+        """
+        Enregistre la date de synchronisation du catalogue
+
+        Args:
+            sync_date: Date de synchronisation
+        """
+        self.set_sync_metadata('last_catalog_sync', sync_date.isoformat())
 
     # === GESTION DES COMMANDES ===
 

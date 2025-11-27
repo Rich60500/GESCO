@@ -61,7 +61,16 @@ class RechercheSoneParWidget(QWidget):
         btn_rechercher.clicked.connect(self.rechercher_produits)
         search_layout.addWidget(btn_rechercher)
 
+        btn_sync = ModernButton("⬇️ Sync Catalogue", "secondary")
+        btn_sync.clicked.connect(self.synchroniser_catalogue)
+        search_layout.addWidget(btn_sync)
+
         layout.addLayout(search_layout)
+
+        # Info catalogue
+        self.update_catalog_info()
+        self.label_catalog_info = ModernLabel("", "secondary")
+        layout.addWidget(self.label_catalog_info)
 
         # Info
         info_label = ModernLabel(
@@ -134,6 +143,95 @@ class RechercheSoneParWidget(QWidget):
         actions_layout.addWidget(self.label_results)
 
         layout.addLayout(actions_layout)
+
+    def update_catalog_info(self):
+        """Met à jour l'info du catalogue"""
+        try:
+            info = self.client.get_catalog_info()
+            product_count = info['product_count']
+            last_sync = info['last_sync']
+
+            if last_sync:
+                last_sync_str = last_sync.strftime("%d/%m/%Y %H:%M")
+                self.label_catalog_info.setText(
+                    f"📚 Catalogue local: {product_count} produits | Dernière sync: {last_sync_str}"
+                )
+            else:
+                self.label_catalog_info.setText(
+                    f"📚 Catalogue local: {product_count} produits | Aucune synchronisation"
+                )
+        except:
+            self.label_catalog_info.setText("📚 Catalogue local: Non disponible")
+
+    def synchroniser_catalogue(self):
+        """Synchronise le catalogue Sonepar"""
+        from PySide6.QtWidgets import QProgressDialog
+        from PySide6.QtCore import QTimer
+
+        # Demander confirmation
+        reply = QMessageBox.question(
+            self,
+            "Synchronisation du catalogue",
+            "Cette opération peut prendre plusieurs minutes.\n\n"
+            "Voulez-vous synchroniser le catalogue complet ?\n"
+            "(Recommandé: 10 pages = ~10 000 produits)",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+        )
+
+        if reply != QMessageBox.StandardButton.Yes:
+            return
+
+        # Dialogue de progression
+        progress = QProgressDialog(
+            "Synchronisation du catalogue Sonepar en cours...",
+            "Annuler",
+            0,
+            10,
+            self
+        )
+        progress.setWindowTitle("Synchronisation")
+        progress.setWindowModality(Qt.WindowModality.WindowModal)
+        progress.show()
+
+        # Callback de progression
+        def update_progress(page, max_pages, total_products):
+            progress.setValue(page)
+            progress.setLabelText(
+                f"Téléchargement page {page}/{max_pages}...\n"
+                f"{total_products} produits synchronisés"
+            )
+
+        try:
+            # Lancer la synchronisation
+            result = self.client.sync_catalog(
+                max_pages=10,
+                progress_callback=update_progress
+            )
+
+            progress.close()
+
+            # Mettre à jour l'affichage
+            self.update_catalog_info()
+
+            # Message de succès
+            QMessageBox.information(
+                self,
+                "Synchronisation terminée",
+                f"✓ Catalogue synchronisé avec succès !\n\n"
+                f"Produits téléchargés: {result['total_products']}\n"
+                f"Pages: {result['pages_downloaded']}\n"
+                f"Durée: {result['duration']:.1f}s\n\n"
+                f"Vous pouvez maintenant rechercher rapidement dans le catalogue local."
+            )
+
+        except Exception as e:
+            progress.close()
+            QMessageBox.critical(
+                self,
+                "Erreur de synchronisation",
+                f"Impossible de synchroniser le catalogue:\n\n{str(e)}\n\n"
+                f"Vérifiez votre connexion et vos identifiants API."
+            )
 
     def rechercher_produits(self):
         """Recherche des produits dans le catalogue"""

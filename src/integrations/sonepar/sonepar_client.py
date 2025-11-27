@@ -15,6 +15,7 @@ from .sonepar_models import (
     Order, OrderLine, DeliveryNote, ProductStatus,
     OrderType, StockType, OrderStatus
 )
+from .sonepar_database import SoneParDatabase
 
 
 class RateLimiter:
@@ -57,14 +58,16 @@ class RateLimiter:
 class SoneParClient:
     """Client pour l'API Sonepar"""
 
-    def __init__(self, config: Optional[SoneParConfig] = None):
+    def __init__(self, config: Optional[SoneParConfig] = None, db_path: str = "data/gesco.db"):
         """
         Initialise le client API
 
         Args:
             config: Configuration Sonepar (utilise la config par défaut si None)
+            db_path: Chemin vers la base de données locale
         """
         self.config = config or SoneParConfig()
+        self.db = SoneParDatabase(db_path)
 
         # Rate limiters
         self.rate_limiter = RateLimiter(
@@ -153,28 +156,54 @@ class SoneParClient:
         self,
         query: str,
         brand_id: Optional[str] = None,
-        limit: int = 50
+        limit: int = 50,
+        use_local_db: bool = True
     ) -> List[Product]:
         """
         Recherche des produits dans le catalogue Sonepar
 
-        NOTE: L'API Sonepar ne supporte PAS la recherche textuelle directe.
-        Cette méthode utilise GET /products/v1/catalogs qui télécharge un
-        catalogue complet et filtre localement.
-
-        Pour une recherche optimale, il faudrait:
-        1. Télécharger périodiquement les catalogues des marques
-        2. Les stocker localement
-        3. Faire la recherche en base de données locale
+        Cette méthode privilégie la recherche dans la base locale pour
+        de meilleures performances. Si aucun résultat n'est trouvé localement,
+        elle peut interroger l'API.
 
         Args:
             query: Terme de recherche (référence, description, etc.)
             brand_id: Filtrer par marque (optionnel)
             limit: Nombre maximum de résultats
+            use_local_db: Rechercher d'abord dans la base locale (défaut: True)
 
         Returns:
             Liste de produits correspondants
         """
+        # 1. Essayer la recherche locale d'abord si activée
+        if use_local_db:
+            local_results = self.db.search_products(query, brand_id, limit)
+            if local_results:
+                # Convertir les résultats dict en objets Product
+                products = []
+                for row in local_results:
+                    brand = Brand(
+                        id=row.get('brand_id', ''),
+                        name=row.get('brand', ''),
+                        logo_url=None
+                    )
+
+                    product = Product(
+                        id=row.get('id', ''),
+                        ean=row.get('ean', ''),
+                        reference=row.get('reference', ''),
+                        description=row.get('description', ''),
+                        brand=brand,
+                        status=ProductStatus(row.get('status', 'UNKNOWN'))
+                    )
+                    products.append(product)
+
+                return products
+
+        # 2. Si pas de résultats locaux, interroger l'API
+        # NOTE: L'API Sonepar ne supporte PAS la recherche textuelle directe.
+        # Cette méthode utilise GET /products/v1/catalogs qui télécharge un
+        # catalogue complet et filtre localement.
         params = {
             'responseType': 'json',
             'page': 1  # Première page uniquement pour la recherche
@@ -251,6 +280,151 @@ class SoneParClient:
                 break
 
         return products
+
+    def sync_catalog(
+        self,
+        brand_id: Optional[str] = None,
+        max_pages: int = 10,
+        progress_callback: Optional[callable] = None
+    ) -> Dict[str, Any]:
+        """
+        Synchronise le catalogue Sonepar dans la base de données locale
+
+        Cette méthode télécharge les produits du catalogue Sonepar par pages
+        et les stocke en base locale pour permettre des recherches rapides.
+
+        Args:
+            brand_id: Filtrer par marque (optionnel, sinon tous les produits)
+            max_pages: Nombre maximum de pages à télécharger (défaut: 10)
+            progress_callback: Fonction appelée avec (page, total_pages, products_count)
+
+        Returns:
+            Statistiques de synchronisation:
+            {
+                'total_products': int,
+                'pages_downloaded': int,
+                'duration': float,
+                'last_sync': datetime
+            }
+        """
+        start_time = time.time()
+        total_products = 0
+        page = 1
+
+        print(f"Début de la synchronisation du catalogue Sonepar...")
+        if brand_id:
+            print(f"  Marque: {brand_id}")
+        print(f"  Pages max: {max_pages}")
+
+        while page <= max_pages:
+            try:
+                params = {
+                    'responseType': 'json',
+                    'page': page
+                }
+
+                if brand_id:
+                    params['brandId'] = brand_id
+
+                print(f"  Téléchargement page {page}/{max_pages}...")
+
+                data = self._make_request(
+                    'GET',
+                    '/products/v1/catalogs',
+                    use_catalog_limiter=True,
+                    params=params
+                )
+
+                products_data = data.get('products', [])
+                if not products_data:
+                    print(f"  Aucun produit trouvé sur la page {page}, arrêt.")
+                    break
+
+                # Convertir les produits en format dict pour la DB
+                products_to_save = []
+                for item in products_data:
+                    brand_data = item.get('brand', {})
+                    status_code = item.get('status', 20)
+
+                    if isinstance(status_code, int):
+                        status = 'ACTIVE' if status_code == 20 else 'DISCONTINUED'
+                    else:
+                        status = status_code
+
+                    product_dict = {
+                        'id': item.get('soneparProductId', item.get('id', '')),
+                        'ean': item.get('gtin', item.get('ean', '')),
+                        'reference': item.get('supplierProductId', item.get('reference', '')),
+                        'description': item.get('description', ''),
+                        'brand': brand_data.get('name', '') if brand_data else '',
+                        'brand_id': brand_data.get('id', '') if brand_data else '',
+                        'unit_price': 0.0,  # Prix nécessite un endpoint séparé
+                        'stock_available': 0,  # Stock nécessite un endpoint séparé
+                        'status': status,
+                        'image_url': item.get('image_url', ''),
+                        'technical_specs': ''  # Specs nécessitent un endpoint séparé
+                    }
+                    products_to_save.append(product_dict)
+
+                # Sauvegarder en base
+                count = self.db.save_products(products_to_save)
+                total_products += count
+
+                print(f"  ✓ Page {page}: {count} produits sauvegardés")
+
+                # Callback de progression
+                if progress_callback:
+                    progress_callback(page, max_pages, total_products)
+
+                # Vérifier s'il y a d'autres pages
+                pagination = data.get('pagination', {})
+                total_pages = pagination.get('totalPages', page)
+
+                if page >= total_pages:
+                    print(f"  Dernière page atteinte ({total_pages} pages au total)")
+                    break
+
+                page += 1
+
+            except Exception as e:
+                print(f"  ✗ Erreur page {page}: {e}")
+                break
+
+        # Enregistrer la date de synchronisation
+        sync_date = datetime.now()
+        self.db.set_last_sync_date(sync_date)
+
+        duration = time.time() - start_time
+
+        result = {
+            'total_products': total_products,
+            'pages_downloaded': page,
+            'duration': duration,
+            'last_sync': sync_date
+        }
+
+        print(f"\n✓ Synchronisation terminée:")
+        print(f"  Produits: {total_products}")
+        print(f"  Pages: {page}")
+        print(f"  Durée: {duration:.1f}s")
+
+        return result
+
+    def get_catalog_info(self) -> Dict[str, Any]:
+        """
+        Retourne des informations sur le catalogue local
+
+        Returns:
+            Informations du catalogue:
+            {
+                'product_count': int,
+                'last_sync': datetime or None
+            }
+        """
+        return {
+            'product_count': self.db.get_product_count(),
+            'last_sync': self.db.get_last_sync_date()
+        }
 
     def get_product_by_reference(self, reference: str) -> Optional[Product]:
         """
