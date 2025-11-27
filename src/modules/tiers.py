@@ -43,7 +43,7 @@ class TiersModule(QWidget):
         )
 
         # En-tête
-        header = ModernLabel("Tiers / Clients / Contacts", DesignSystem.FONT_SIZE_H1)
+        header = ModernLabel("Tiers / Clients / Contacts", "large")
         header.setStyleSheet(f"color: {DesignSystem.TEXT_PRIMARY}; font-weight: 600;")
         layout.addWidget(header)
 
@@ -477,7 +477,7 @@ class TiersDialog(ResponsiveDialog):
         layout.setSpacing(DesignSystem.SPACING_LG)
 
         # Section Informations générales
-        section_general = ModernLabel("Informations générales", DesignSystem.FONT_SIZE_H3)
+        section_general = ModernLabel("Informations générales", "title")
         section_general.setStyleSheet(f"color: {DesignSystem.TEXT_PRIMARY}; font-weight: 600; margin-top: {DesignSystem.SPACING_MD}px;")
         layout.addWidget(section_general)
 
@@ -509,7 +509,7 @@ class TiersDialog(ResponsiveDialog):
         layout.addLayout(grid_general)
 
         # Section Adresse
-        section_adresse = ModernLabel("Adresse", DesignSystem.FONT_SIZE_H3)
+        section_adresse = ModernLabel("Adresse", "title")
         section_adresse.setStyleSheet(f"color: {DesignSystem.TEXT_PRIMARY}; font-weight: 600; margin-top: {DesignSystem.SPACING_LG}px;")
         layout.addWidget(section_adresse)
 
@@ -547,7 +547,7 @@ class TiersDialog(ResponsiveDialog):
         layout.addLayout(grid_adresse)
 
         # Section Informations financières
-        section_finance = ModernLabel("Informations financières", DesignSystem.FONT_SIZE_H3)
+        section_finance = ModernLabel("Informations financières", "title")
         section_finance.setStyleSheet(f"color: {DesignSystem.TEXT_PRIMARY}; font-weight: 600; margin-top: {DesignSystem.SPACING_LG}px;")
         layout.addWidget(section_finance)
 
@@ -583,7 +583,7 @@ class TiersDialog(ResponsiveDialog):
         layout.addLayout(grid_finance)
 
         # Commentaires
-        section_comments = ModernLabel("Commentaires", DesignSystem.FONT_SIZE_H3)
+        section_comments = ModernLabel("Commentaires", "title")
         section_comments.setStyleSheet(f"color: {DesignSystem.TEXT_PRIMARY}; font-weight: 600; margin-top: {DesignSystem.SPACING_LG}px;")
         layout.addWidget(section_comments)
 
