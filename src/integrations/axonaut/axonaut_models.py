@@ -60,6 +60,99 @@ class Category:
 
 
 @dataclass
+class Address:
+    """Adresse de chantier liée à une entreprise"""
+    id: Optional[int] = None
+    company_id: Optional[int] = None
+    name: Optional[str] = None  # Nom de l'adresse (ex: "Chantier Paris Nord")
+    contact_name: Optional[str] = None
+    street: Optional[str] = None
+    zip_code: Optional[str] = None
+    city: Optional[str] = None
+    country: Optional[str] = "France"
+    phone: Optional[str] = None
+    email: Optional[str] = None
+    comments: Optional[str] = None
+    custom_fields: Dict[str, Any] = field(default_factory=dict)
+
+    @classmethod
+    def from_dict(cls, data: dict) -> 'Address':
+        """Crée une instance depuis un dictionnaire"""
+        if not data:
+            return cls()
+        return cls(
+            id=data.get('id'),
+            company_id=data.get('company_id'),
+            name=data.get('name'),
+            contact_name=data.get('contact_name'),
+            street=data.get('street'),
+            zip_code=data.get('zip_code'),
+            city=data.get('city'),
+            country=data.get('country', 'France'),
+            phone=data.get('phone'),
+            email=data.get('email'),
+            comments=data.get('comments'),
+            custom_fields=data.get('custom_fields', {})
+        )
+
+    def to_dict(self, for_api: bool = False) -> dict:
+        """
+        Convertit en dictionnaire
+
+        Args:
+            for_api: Si True, utilise le format attendu par l'API (POST/PATCH)
+        """
+        result = {
+            'name': self.name,
+            'contact_name': self.contact_name,
+            'street': self.street,
+            'zip_code': self.zip_code,
+            'city': self.city,
+            'country': self.country,
+            'phone': self.phone,
+            'email': self.email,
+            'comments': self.comments
+        }
+
+        if self.custom_fields:
+            result['custom_fields'] = self.custom_fields
+
+        if not for_api:
+            result['id'] = self.id
+            result['company_id'] = self.company_id
+
+        return result
+
+    @property
+    def full_address(self) -> str:
+        """Retourne l'adresse complète formatée"""
+        parts = []
+        if self.name:
+            parts.append(f"📍 {self.name}")
+        if self.street:
+            parts.append(self.street)
+        if self.zip_code or self.city:
+            city_line = []
+            if self.zip_code:
+                city_line.append(self.zip_code)
+            if self.city:
+                city_line.append(self.city)
+            parts.append(' '.join(city_line))
+        if self.country:
+            parts.append(self.country)
+        return '\n'.join(parts) if parts else 'Pas d\'adresse'
+
+    @property
+    def short_label(self) -> str:
+        """Retourne un libellé court pour affichage"""
+        if self.name:
+            return f"{self.name} ({self.city or 'N/A'})"
+        elif self.city:
+            return self.city
+        return "Adresse sans nom"
+
+
+@dataclass
 class Employee:
     """Contact/Employé d'une entreprise"""
     id: Optional[int] = None

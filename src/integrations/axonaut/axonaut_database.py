@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import List, Optional, Dict, Any
 from datetime import datetime
 
-from .axonaut_models import Company, Employee
+from .axonaut_models import Company, Employee, Address
 
 
 class AxonautDatabase:
@@ -98,6 +98,30 @@ class AxonautDatabase:
             )
         """)
 
+        # Table des adresses de chantier
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS addresses (
+                id INTEGER PRIMARY KEY,
+                axonaut_id INTEGER UNIQUE,
+                company_id INTEGER,
+                axonaut_company_id INTEGER,
+                name TEXT,
+                contact_name TEXT,
+                street TEXT,
+                zip_code TEXT,
+                city TEXT,
+                country TEXT DEFAULT 'France',
+                phone TEXT,
+                email TEXT,
+                comments TEXT,
+                custom_fields TEXT,
+                last_sync TEXT,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE CASCADE
+            )
+        """)
+
         # Index pour les recherches
         cursor.execute("""
             CREATE INDEX IF NOT EXISTS idx_companies_name ON companies(name)
@@ -107,6 +131,9 @@ class AxonautDatabase:
         """)
         cursor.execute("""
             CREATE INDEX IF NOT EXISTS idx_employees_company ON employees(company_id)
+        """)
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_addresses_company ON addresses(company_id)
         """)
 
         conn.commit()
@@ -447,5 +474,167 @@ class AxonautDatabase:
         conn = self.get_connection()
         cursor = conn.cursor()
         cursor.execute("DELETE FROM companies WHERE id = ?", (company_id,))
+        conn.commit()
+        conn.close()
+
+    # ==================== ADDRESSES ====================
+
+    def save_address(self, address: Address, company_local_id: Optional[int] = None) -> int:
+        """
+        Sauvegarde ou met à jour une adresse
+
+        Args:
+            address: Objet Address
+            company_local_id: ID local de l'entreprise (optionnel)
+
+        Returns:
+            ID local de l'adresse
+        """
+        conn = self.get_connection()
+        cursor = conn.cursor()
+
+        custom_fields = json.dumps(address.custom_fields) if address.custom_fields else None
+
+        if address.id:
+            cursor.execute("SELECT id FROM addresses WHERE axonaut_id = ?", (address.id,))
+            existing = cursor.fetchone()
+
+            if existing:
+                # Mise à jour
+                cursor.execute("""
+                    UPDATE addresses SET
+                        name = ?, contact_name = ?, street = ?, zip_code = ?,
+                        city = ?, country = ?, phone = ?, email = ?,
+                        comments = ?, custom_fields = ?,
+                        last_sync = ?, updated_at = CURRENT_TIMESTAMP
+                    WHERE axonaut_id = ?
+                """, (
+                    address.name, address.contact_name, address.street, address.zip_code,
+                    address.city, address.country, address.phone, address.email,
+                    address.comments, custom_fields,
+                    datetime.now().isoformat(), address.id
+                ))
+                local_id = existing['id']
+            else:
+                # Insertion avec ID Axonaut
+                cursor.execute("""
+                    INSERT INTO addresses (
+                        axonaut_id, company_id, axonaut_company_id, name, contact_name,
+                        street, zip_code, city, country, phone, email,
+                        comments, custom_fields, last_sync
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (
+                    address.id, company_local_id, address.company_id, address.name,
+                    address.contact_name, address.street, address.zip_code, address.city,
+                    address.country, address.phone, address.email,
+                    address.comments, custom_fields, datetime.now().isoformat()
+                ))
+                local_id = cursor.lastrowid
+        else:
+            # Nouvelle adresse sans ID Axonaut
+            cursor.execute("""
+                INSERT INTO addresses (
+                    company_id, name, contact_name, street, zip_code,
+                    city, country, phone, email, comments, custom_fields
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                company_local_id, address.name, address.contact_name, address.street,
+                address.zip_code, address.city, address.country, address.phone,
+                address.email, address.comments, custom_fields
+            ))
+            local_id = cursor.lastrowid
+
+        conn.commit()
+        conn.close()
+        return local_id
+
+    def get_company_addresses(self, company_id: int) -> List[Address]:
+        """
+        Récupère les adresses d'une entreprise
+
+        Args:
+            company_id: ID local de l'entreprise
+
+        Returns:
+            Liste des adresses
+        """
+        conn = self.get_connection()
+        cursor = conn.cursor()
+
+        cursor.execute("SELECT * FROM addresses WHERE company_id = ? ORDER BY name", (company_id,))
+        rows = cursor.fetchall()
+
+        addresses = [self._row_to_address(row) for row in rows]
+
+        conn.close()
+        return addresses
+
+    def get_address(self, address_id: int) -> Optional[Address]:
+        """
+        Récupère une adresse par son ID local
+
+        Args:
+            address_id: ID local de l'adresse
+
+        Returns:
+            Adresse ou None
+        """
+        conn = self.get_connection()
+        cursor = conn.cursor()
+
+        cursor.execute("SELECT * FROM addresses WHERE id = ?", (address_id,))
+        row = cursor.fetchone()
+
+        conn.close()
+
+        if not row:
+            return None
+
+        return self._row_to_address(row)
+
+    def get_all_addresses(self) -> List[Address]:
+        """
+        Récupère toutes les adresses
+
+        Returns:
+            Liste de toutes les adresses
+        """
+        conn = self.get_connection()
+        cursor = conn.cursor()
+
+        cursor.execute("SELECT * FROM addresses ORDER BY city, name")
+        rows = cursor.fetchall()
+
+        addresses = [self._row_to_address(row) for row in rows]
+
+        conn.close()
+        return addresses
+
+    def _row_to_address(self, row: sqlite3.Row) -> Address:
+        """Convertit une ligne SQL en objet Address"""
+        custom_fields = {}
+        if row['custom_fields']:
+            custom_fields = json.loads(row['custom_fields'])
+
+        return Address(
+            id=row['axonaut_id'],
+            company_id=row['axonaut_company_id'] or row['company_id'],
+            name=row['name'],
+            contact_name=row['contact_name'],
+            street=row['street'],
+            zip_code=row['zip_code'],
+            city=row['city'],
+            country=row['country'],
+            phone=row['phone'],
+            email=row['email'],
+            comments=row['comments'],
+            custom_fields=custom_fields
+        )
+
+    def delete_address(self, address_id: int):
+        """Supprime une adresse"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM addresses WHERE id = ?", (address_id,))
         conn.commit()
         conn.close()

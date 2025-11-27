@@ -11,7 +11,7 @@ from PySide6.QtGui import QFont
 
 from design_system import (DesignSystem, ModernLabel, ModernInput, ModernComboBox,
                           ModernTextEdit, ModernButton, ModernCard, ResponsiveDialog)
-from integrations.axonaut import AxonautClient, AxonautConfig, AxonautDatabase, Company, Employee
+from integrations.axonaut import AxonautClient, AxonautConfig, AxonautDatabase, Company, Employee, Address
 
 
 class TiersModule(QWidget):
@@ -275,6 +275,22 @@ class TiersModule(QWidget):
             """)
             actions_layout.addWidget(btn_contacts)
 
+            # Bouton Adresses
+            btn_addresses = QPushButton("📍")
+            btn_addresses.setFixedSize(32, 32)
+            btn_addresses.clicked.connect(lambda checked, c=company: self.gerer_adresses(c))
+            btn_addresses.setStyleSheet(f"""
+                QPushButton {{
+                    background-color: {DesignSystem.SURFACE_ELEVATED};
+                    border: none;
+                    border-radius: {DesignSystem.RADIUS_SM}px;
+                }}
+                QPushButton:hover {{
+                    background-color: {DesignSystem.ACCENT_ORANGE};
+                }}
+            """)
+            actions_layout.addWidget(btn_addresses)
+
             # Bouton Supprimer
             btn_delete = QPushButton("🗑️")
             btn_delete.setFixedSize(32, 32)
@@ -365,6 +381,14 @@ class TiersModule(QWidget):
 
         if dialog.exec():
             # Recharger les tiers pour mettre à jour le nombre de contacts
+            self.charger_tiers()
+
+    def gerer_adresses(self, company: Company):
+        """Ouvre le dialogue pour gérer les adresses de chantier d'un tiers"""
+        dialog = AddressesDialog(self.axonaut_db, self.axonaut_client, company, parent=self)
+
+        if dialog.exec():
+            # Recharger les tiers
             self.charger_tiers()
 
     def supprimer_tiers(self, company: Company):
@@ -994,6 +1018,359 @@ class EmployeeDialog(ResponsiveDialog):
         """Valide le formulaire"""
         if not self.input_firstname.text().strip() or not self.input_lastname.text().strip():
             QMessageBox.warning(self, "Validation", "Le prénom et le nom sont obligatoires.")
+            return False
+
+        return True
+
+
+class AddressesDialog(ResponsiveDialog):
+    """Dialogue pour gérer les adresses de chantier d'un tiers"""
+
+    def __init__(self, db: AxonautDatabase, client: AxonautClient,
+                 company: Company, parent=None):
+        super().__init__(f"Adresses de chantier - {company.name}", 900, parent)
+
+        self.db = db
+        self.client = client
+        self.company = company
+
+        self.init_ui()
+        self.charger_adresses()
+
+    def init_ui(self):
+        """Initialise l'interface"""
+        layout = QVBoxLayout()
+        layout.setSpacing(DesignSystem.SPACING_MD)
+
+        # Barre d'outils
+        toolbar = QHBoxLayout()
+        toolbar.addStretch()
+
+        btn_nouveau = ModernButton("+ Nouvelle Adresse", "primary")
+        btn_nouveau.clicked.connect(self.nouvelle_adresse)
+        toolbar.addWidget(btn_nouveau)
+
+        layout.addLayout(toolbar)
+
+        # Table des adresses
+        self.table = QTableWidget()
+        self.table.setColumnCount(6)
+        self.table.setHorizontalHeaderLabels([
+            "Nom", "Adresse", "Code Postal", "Ville", "Contact", "Actions"
+        ])
+
+        # Style
+        self.table.setStyleSheet(f"""
+            QTableWidget {{
+                background-color: {DesignSystem.SURFACE};
+                border: none;
+                border-radius: {DesignSystem.RADIUS_MD}px;
+                gridline-color: {DesignSystem.BORDER};
+            }}
+            QTableWidget::item {{
+                padding: {DesignSystem.SPACING_SM}px;
+                border: none;
+            }}
+            QHeaderView::section {{
+                background-color: {DesignSystem.SURFACE_ELEVATED};
+                padding: {DesignSystem.SPACING_MD}px;
+                border: none;
+                border-bottom: 1px solid {DesignSystem.BORDER};
+                font-weight: 600;
+            }}
+        """)
+
+        header = self.table.horizontalHeader()
+        header.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+        header.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(5, QHeaderView.ResizeMode.ResizeToContents)
+
+        self.table.verticalHeader().setVisible(False)
+
+        layout.addWidget(self.table)
+
+        self.content_layout.addLayout(layout)
+
+        # Masquer les boutons OK/Annuler du dialogue standard
+        self.button_box.hide()
+
+        # Ajouter un bouton Fermer
+        btn_close = ModernButton("Fermer", "secondary")
+        btn_close.clicked.connect(self.accept)
+        self.content_layout.addWidget(btn_close)
+
+    def charger_adresses(self):
+        """Charge les adresses du tiers"""
+        try:
+            if self.company.id:
+                # Récupérer depuis l'API Axonaut
+                addresses = self.client.get_company_addresses(self.company.id)
+                # Sauvegarder localement
+                for address in addresses:
+                    self.db.save_address(address)
+            else:
+                # Récupérer depuis la base locale
+                addresses = []
+
+            self.table.setRowCount(len(addresses))
+
+            for row, address in enumerate(addresses):
+                # Nom
+                self.table.setItem(row, 0, QTableWidgetItem(address.name or "-"))
+
+                # Adresse
+                self.table.setItem(row, 1, QTableWidgetItem(address.street or "-"))
+
+                # Code Postal
+                self.table.setItem(row, 2, QTableWidgetItem(address.zip_code or "-"))
+
+                # Ville
+                self.table.setItem(row, 3, QTableWidgetItem(address.city or "-"))
+
+                # Contact
+                self.table.setItem(row, 4, QTableWidgetItem(address.contact_name or "-"))
+
+                # Actions
+                actions_widget = QWidget()
+                actions_layout = QHBoxLayout(actions_widget)
+                actions_layout.setContentsMargins(4, 4, 4, 4)
+                actions_layout.setSpacing(4)
+
+                btn_edit = QPushButton("✏️")
+                btn_edit.setFixedSize(32, 32)
+                btn_edit.clicked.connect(lambda checked, a=address: self.modifier_adresse(a))
+                btn_edit.setStyleSheet(f"""
+                    QPushButton {{
+                        background-color: {DesignSystem.SURFACE_ELEVATED};
+                        border: none;
+                        border-radius: {DesignSystem.RADIUS_SM}px;
+                    }}
+                    QPushButton:hover {{
+                        background-color: {DesignSystem.ACCENT_BLUE};
+                    }}
+                """)
+                actions_layout.addWidget(btn_edit)
+
+                btn_delete = QPushButton("🗑️")
+                btn_delete.setFixedSize(32, 32)
+                btn_delete.clicked.connect(lambda checked, a=address: self.supprimer_adresse(a))
+                btn_delete.setStyleSheet(f"""
+                    QPushButton {{
+                        background-color: {DesignSystem.SURFACE_ELEVATED};
+                        border: none;
+                        border-radius: {DesignSystem.RADIUS_SM}px;
+                    }}
+                    QPushButton:hover {{
+                        background-color: {DesignSystem.ACCENT_RED};
+                    }}
+                """)
+                actions_layout.addWidget(btn_delete)
+
+                self.table.setCellWidget(row, 5, actions_widget)
+
+        except Exception as e:
+            QMessageBox.warning(
+                self,
+                "Erreur",
+                f"Impossible de charger les adresses:\n{str(e)}"
+            )
+
+    def nouvelle_adresse(self):
+        """Ouvre le dialogue pour créer une nouvelle adresse"""
+        dialog = AddressDialog(address=None, parent=self)
+
+        if dialog.exec():
+            address = dialog.get_address()
+            address.company_id = self.company.id
+
+            try:
+                if self.company.id:
+                    # Créer dans Axonaut
+                    created = self.client.create_address(self.company.id, address)
+                    # Sauvegarder dans la BDD locale
+                    self.db.save_address(created)
+
+                QMessageBox.information(
+                    self,
+                    "Succès",
+                    f"L'adresse '{created.name}' a été ajoutée."
+                )
+
+                self.charger_adresses()
+
+            except Exception as e:
+                QMessageBox.critical(
+                    self,
+                    "Erreur",
+                    f"Impossible d'ajouter l'adresse:\n{str(e)}"
+                )
+
+    def modifier_adresse(self, address: Address):
+        """Modifie une adresse"""
+        dialog = AddressDialog(address=address, parent=self)
+
+        if dialog.exec():
+            updated = dialog.get_address()
+
+            try:
+                if address.id:
+                    # Mettre à jour dans Axonaut
+                    result = self.client.update_address(address.id, updated)
+                    # Mettre à jour localement
+                    self.db.save_address(result)
+
+                QMessageBox.information(
+                    self,
+                    "Succès",
+                    f"L'adresse '{updated.name}' a été modifiée."
+                )
+
+                self.charger_adresses()
+
+            except Exception as e:
+                QMessageBox.critical(
+                    self,
+                    "Erreur",
+                    f"Impossible de modifier l'adresse:\n{str(e)}"
+                )
+
+    def supprimer_adresse(self, address: Address):
+        """Supprime une adresse"""
+        reply = QMessageBox.question(
+            self,
+            "Confirmation",
+            f"Êtes-vous sûr de vouloir supprimer l'adresse '{address.name}' ?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+        )
+
+        if reply == QMessageBox.StandardButton.Yes:
+            try:
+                if address.id:
+                    # Supprimer dans Axonaut
+                    self.client.delete_address(address.id)
+
+                QMessageBox.information(
+                    self,
+                    "Succès",
+                    f"L'adresse '{address.name}' a été supprimée."
+                )
+
+                self.charger_adresses()
+
+            except Exception as e:
+                QMessageBox.critical(
+                    self,
+                    "Erreur",
+                    f"Impossible de supprimer l'adresse:\n{str(e)}"
+                )
+
+
+class AddressDialog(ResponsiveDialog):
+    """Dialogue pour créer ou modifier une adresse de chantier"""
+
+    def __init__(self, address: Address = None, parent=None):
+        title = "Modifier l'Adresse" if address else "Nouvelle Adresse"
+        super().__init__(title, 600, parent)
+
+        self.address = address or Address()
+        self.init_form()
+
+        if address:
+            self.load_address_data()
+
+    def init_form(self):
+        """Initialise le formulaire"""
+        layout = QVBoxLayout()
+        layout.setSpacing(DesignSystem.SPACING_MD)
+
+        grid = QGridLayout()
+        grid.setSpacing(DesignSystem.SPACING_MD)
+        grid.setColumnStretch(1, 1)
+
+        # Nom de l'adresse
+        grid.addWidget(ModernLabel("Nom de l'adresse *"), 0, 0)
+        self.input_name = ModernInput("Ex: Chantier Paris Nord")
+        grid.addWidget(self.input_name, 0, 1)
+
+        # Contact
+        grid.addWidget(ModernLabel("Contact"), 1, 0)
+        self.input_contact = ModernInput()
+        grid.addWidget(self.input_contact, 1, 1)
+
+        # Rue
+        grid.addWidget(ModernLabel("Rue"), 2, 0)
+        self.input_street = ModernInput()
+        grid.addWidget(self.input_street, 2, 1)
+
+        # Code postal et Ville (sur la même ligne)
+        grid.addWidget(ModernLabel("Code postal / Ville"), 3, 0)
+        city_layout = QHBoxLayout()
+        city_layout.setSpacing(DesignSystem.SPACING_MD)
+        self.input_zip = ModernInput()
+        self.input_zip.setMaximumWidth(120)
+        self.input_city = ModernInput()
+        city_layout.addWidget(self.input_zip)
+        city_layout.addWidget(self.input_city)
+        grid.addLayout(city_layout, 3, 1)
+
+        # Pays
+        grid.addWidget(ModernLabel("Pays"), 4, 0)
+        self.input_country = ModernInput()
+        self.input_country.setText("France")
+        grid.addWidget(self.input_country, 4, 1)
+
+        # Téléphone
+        grid.addWidget(ModernLabel("Téléphone"), 5, 0)
+        self.input_phone = ModernInput()
+        grid.addWidget(self.input_phone, 5, 1)
+
+        # Email
+        grid.addWidget(ModernLabel("Email"), 6, 0)
+        self.input_email = ModernInput()
+        grid.addWidget(self.input_email, 6, 1)
+
+        # Commentaires
+        grid.addWidget(ModernLabel("Commentaires"), 7, 0)
+        self.input_comments = ModernTextEdit()
+        self.input_comments.setMaximumHeight(80)
+        grid.addWidget(self.input_comments, 7, 1)
+
+        layout.addLayout(grid)
+        self.content_layout.addLayout(layout)
+
+    def load_address_data(self):
+        """Charge les données de l'adresse"""
+        self.input_name.setText(self.address.name or "")
+        self.input_contact.setText(self.address.contact_name or "")
+        self.input_street.setText(self.address.street or "")
+        self.input_zip.setText(self.address.zip_code or "")
+        self.input_city.setText(self.address.city or "")
+        self.input_country.setText(self.address.country or "France")
+        self.input_phone.setText(self.address.phone or "")
+        self.input_email.setText(self.address.email or "")
+        self.input_comments.setText(self.address.comments or "")
+
+    def get_address(self) -> Address:
+        """Récupère les données du formulaire"""
+        self.address.name = self.input_name.text()
+        self.address.contact_name = self.input_contact.text()
+        self.address.street = self.input_street.text()
+        self.address.zip_code = self.input_zip.text()
+        self.address.city = self.input_city.text()
+        self.address.country = self.input_country.text()
+        self.address.phone = self.input_phone.text()
+        self.address.email = self.input_email.text()
+        self.address.comments = self.input_comments.toPlainText()
+
+        return self.address
+
+    def validate(self) -> bool:
+        """Valide le formulaire"""
+        if not self.input_name.text().strip():
+            QMessageBox.warning(self, "Validation", "Le nom de l'adresse est obligatoire.")
             return False
 
         return True

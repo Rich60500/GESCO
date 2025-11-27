@@ -7,7 +7,7 @@ import requests
 from typing import List, Optional, Dict, Any
 
 from .axonaut_config import AxonautConfig
-from .axonaut_models import Company, Employee
+from .axonaut_models import Company, Employee, Address
 
 
 class AxonautAPIError(Exception):
@@ -219,6 +219,74 @@ class AxonautClient:
         """
         try:
             self._request('DELETE', f'/employees/{employee_id}')
+            return True
+        except AxonautAPIError:
+            return False
+
+    # ==================== ADDRESSES ====================
+
+    def get_company_addresses(self, company_id: int) -> List[Address]:
+        """
+        Récupère les adresses de chantier d'une entreprise
+
+        Args:
+            company_id: ID de l'entreprise
+
+        Returns:
+            Liste des adresses
+        """
+        response = self._request('GET', f'/companies/{company_id}/addresses')
+        data = response.json()
+
+        if isinstance(data, list):
+            return [Address.from_dict(item) for item in data]
+        return []
+
+    def create_address(self, company_id: int, address: Address) -> Address:
+        """
+        Crée une nouvelle adresse de chantier pour une entreprise
+
+        Args:
+            company_id: ID de l'entreprise
+            address: Objet Address à créer
+
+        Returns:
+            Adresse créée avec son ID
+        """
+        data = address.to_dict(for_api=True)
+
+        response = self._request('POST', f'/companies/{company_id}/addresses', json=data)
+        result = response.json()
+        return Address.from_dict(result)
+
+    def update_address(self, address_id: int, address: Address) -> Address:
+        """
+        Met à jour une adresse existante
+
+        Args:
+            address_id: ID de l'adresse
+            address: Objet Address avec les nouvelles données
+
+        Returns:
+            Adresse mise à jour
+        """
+        data = address.to_dict(for_api=True)
+        response = self._request('PATCH', f'/addresses/{address_id}', json=data)
+        result = response.json()
+        return Address.from_dict(result)
+
+    def delete_address(self, address_id: int) -> bool:
+        """
+        Supprime une adresse
+
+        Args:
+            address_id: ID de l'adresse
+
+        Returns:
+            True si succès
+        """
+        try:
+            self._request('DELETE', f'/addresses/{address_id}')
             return True
         except AxonautAPIError:
             return False
