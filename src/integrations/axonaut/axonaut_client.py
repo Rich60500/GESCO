@@ -139,6 +139,20 @@ class AxonautClient:
 
     # ==================== EMPLOYEES ====================
 
+    def get_employees(self) -> List[Employee]:
+        """
+        Récupère la liste de tous les employés
+
+        Returns:
+            Liste des employés
+        """
+        response = self._request('GET', '/employees')
+        data = response.json()
+
+        if isinstance(data, list):
+            return [Employee.from_dict(item) for item in data]
+        return []
+
     def get_company_employees(self, company_id: int) -> List[Employee]:
         """
         Récupère les employés d'une entreprise
@@ -149,8 +163,12 @@ class AxonautClient:
         Returns:
             Liste des employés
         """
-        company = self.get_company(company_id)
-        return company.employees if company else []
+        response = self._request('GET', f'/companies/{company_id}/employees')
+        data = response.json()
+
+        if isinstance(data, list):
+            return [Employee.from_dict(item) for item in data]
+        return []
 
     def create_employee(self, company_id: int, employee: Employee) -> Employee:
         """
@@ -164,40 +182,43 @@ class AxonautClient:
             Employé créé avec son ID
         """
         data = employee.to_dict(for_api=True)
-        response = self._request('POST', f'/companies/{company_id}/employees', json=data)
+        # Ajouter company_id dans le body
+        data['company_id'] = company_id
+
+        response = self._request('POST', '/employees', json=data)
         result = response.json()
         return Employee.from_dict(result)
 
-    def update_employee(self, company_id: int, employee_id: int, employee: Employee) -> Employee:
+    def update_employee(self, employee_id: int, employee: Employee, company_id: Optional[int] = None) -> Employee:
         """
         Met à jour un employé existant
 
         Args:
-            company_id: ID de l'entreprise
             employee_id: ID de l'employé
             employee: Objet Employee avec les nouvelles données
+            company_id: ID de l'entreprise (optionnel, pour compatibilité)
 
         Returns:
             Employé mis à jour
         """
         data = employee.to_dict(for_api=True)
-        response = self._request('PATCH', f'/companies/{company_id}/employees/{employee_id}', json=data)
+        response = self._request('PATCH', f'/employees/{employee_id}', json=data)
         result = response.json()
         return Employee.from_dict(result)
 
-    def delete_employee(self, company_id: int, employee_id: int) -> bool:
+    def delete_employee(self, employee_id: int, company_id: Optional[int] = None) -> bool:
         """
         Supprime un employé
 
         Args:
-            company_id: ID de l'entreprise
             employee_id: ID de l'employé
+            company_id: ID de l'entreprise (optionnel, pour compatibilité)
 
         Returns:
             True si succès
         """
         try:
-            self._request('DELETE', f'/companies/{company_id}/employees/{employee_id}')
+            self._request('DELETE', f'/employees/{employee_id}')
             return True
         except AxonautAPIError:
             return False

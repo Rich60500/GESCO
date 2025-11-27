@@ -833,7 +833,7 @@ class ContactsDialog(ResponsiveDialog):
             try:
                 if self.company.id and employee.id:
                     # Mettre à jour dans Axonaut
-                    result = self.client.update_employee(self.company.id, employee.id, updated)
+                    result = self.client.update_employee(employee.id, updated, company_id=self.company.id)
                     # Mettre à jour localement
                     self.db.save_employee(result)
 
@@ -871,7 +871,7 @@ class ContactsDialog(ResponsiveDialog):
             try:
                 if self.company.id and employee.id:
                     # Supprimer dans Axonaut
-                    self.client.delete_employee(self.company.id, employee.id)
+                    self.client.delete_employee(employee.id, company_id=self.company.id)
 
                 # Supprimer de la liste
                 self.company.employees = [e for e in self.company.employees if e.id != employee.id]
