@@ -452,9 +452,13 @@ class ModuleAchats(QWidget):
         self.achats_directs_widget = AchatsDirectsWidget(self.db)
         self.tabs.addTab(self.achats_directs_widget, "📝 Achats Directs")
 
-        # Onglet 2 : Fournisseurs API (Sonepar, etc.)
+        # Onglet 2 : Sonepar
         try:
-            from modules.achats_old import RechercheProduitsWidget, CreerCommandeDialog
+            from modules.sonepar_widgets import (
+                RechercheSoneParWidget,
+                CreerCommandeSoneParDialog,
+                CommandesChantierWidget
+            )
 
             # Créer l'onglet Sonepar
             sonepar_widget = QWidget()
@@ -467,31 +471,239 @@ class ModuleAchats(QWidget):
 
             # Initialiser clients Sonepar
             sonepar_config = SoneParConfig()
-            sonepar_client = SoneParClient(sonepar_config)
+            self.sonepar_client = SoneParClient(sonepar_config)
+            self.sonepar_db = SoneParDatabase()
 
             # Catalogue
-            recherche_widget = RechercheProduitsWidget(sonepar_client)
+            recherche_widget = RechercheSoneParWidget(self.sonepar_client)
             sonepar_tabs.addTab(recherche_widget, "🔍 Catalogue")
 
-            # Commandes (à implémenter proprement)
-            commandes_widget = QWidget()
-            commandes_layout = QVBoxLayout(commandes_widget)
-            commandes_layout.addWidget(ModernLabel("Commandes Sonepar", "large"))
-            commandes_layout.addWidget(ModernLabel("En cours de développement...", "secondary"))
-            commandes_layout.addStretch()
+            # Commandes
+            commandes_widget = self.creer_onglet_commandes_sonepar()
             sonepar_tabs.addTab(commandes_widget, "📦 Commandes")
 
             sonepar_layout.addWidget(sonepar_tabs)
 
-            self.tabs.addTab(sonepar_widget, "🔌 Fournisseurs API")
+            self.tabs.addTab(sonepar_widget, "🔌 Sonepar")
 
-        except ImportError:
-            # Si l'ancien module n'est pas disponible
+        except ImportError as e:
+            # Si les widgets Sonepar ne sont pas disponibles
             placeholder = QWidget()
             placeholder_layout = QVBoxLayout(placeholder)
             placeholder_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            placeholder_layout.addWidget(ModernLabel("🚧 Module Fournisseurs API", "large"))
-            placeholder_layout.addWidget(ModernLabel("En cours de développement", "secondary"))
-            self.tabs.addTab(placeholder, "🔌 Fournisseurs API")
+            placeholder_layout.addWidget(ModernLabel("🚧 Module Sonepar", "large"))
+            placeholder_layout.addWidget(ModernLabel(f"Erreur : {str(e)}", "secondary"))
+            self.tabs.addTab(placeholder, "🔌 Sonepar")
 
         main_layout.addWidget(self.tabs)
+
+    def creer_onglet_commandes_sonepar(self):
+        """Crée l'onglet des commandes Sonepar"""
+        from modules.sonepar_widgets import CommandesChantierWidget, CreerCommandeSoneParDialog
+
+        widget = QWidget()
+        layout = QVBoxLayout(widget)
+        layout.setContentsMargins(
+            DesignSystem.SPACING_XL,
+            DesignSystem.SPACING_XL,
+            DesignSystem.SPACING_XL,
+            DesignSystem.SPACING_XL
+        )
+        layout.setSpacing(DesignSystem.SPACING_LG)
+
+        # En-tête
+        header_layout = QHBoxLayout()
+
+        title_label = ModernLabel("Commandes Sonepar", "large")
+        header_layout.addWidget(title_label)
+
+        header_layout.addStretch()
+
+        btn_nouvelle = ModernButton("+ Nouvelle commande", "primary")
+        btn_nouvelle.clicked.connect(self.creer_commande_sonepar)
+        header_layout.addWidget(btn_nouvelle)
+
+        layout.addLayout(header_layout)
+
+        # Info
+        info_label = ModernLabel(
+            "💡 Créez et suivez vos commandes Sonepar liées aux chantiers",
+            "secondary"
+        )
+        layout.addWidget(info_label)
+
+        # Filtre
+        filter_layout = QHBoxLayout()
+        filter_layout.setSpacing(DesignSystem.SPACING_SM)
+
+        filter_layout.addWidget(ModernLabel("Filtrer par chantier :"))
+
+        self.filter_chantier_sonepar = ModernComboBox()
+        self.filter_chantier_sonepar.addItem("Tous les chantiers", None)
+        chantiers = self.db.get_chantiers()
+        for c in chantiers:
+            self.filter_chantier_sonepar.addItem(c['nom'], c['id'])
+        self.filter_chantier_sonepar.currentIndexChanged.connect(self.charger_commandes_sonepar)
+        filter_layout.addWidget(self.filter_chantier_sonepar, 1)
+
+        filter_layout.addStretch()
+
+        layout.addLayout(filter_layout)
+
+        # Tableau des commandes
+        self.table_commandes = QTableWidget()
+        self.table_commandes.setColumnCount(6)
+        self.table_commandes.setHorizontalHeaderLabels([
+            "N° Commande", "Date", "Chantier", "Montant", "Statut", "Notes"
+        ])
+
+        header = self.table_commandes.horizontalHeader()
+        header.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
+        header.setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(5, QHeaderView.ResizeMode.Stretch)
+
+        self.table_commandes.verticalHeader().setVisible(False)
+        self.table_commandes.setAlternatingRowColors(True)
+        self.table_commandes.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self.table_commandes.setStyleSheet(f"""
+            QTableWidget {{
+                background-color: {DesignSystem.SURFACE};
+                border: none;
+                border-radius: {DesignSystem.RADIUS_MD}px;
+                gridline-color: {DesignSystem.BORDER_COLOR};
+            }}
+            QTableWidget::item {{
+                padding: {DesignSystem.SPACING_SM}px;
+            }}
+            QTableWidget::item:selected {{
+                background-color: {DesignSystem.ACCENT_BLUE};
+                color: white;
+            }}
+            QHeaderView::section {{
+                background-color: {DesignSystem.SURFACE_ELEVATED};
+                color: {DesignSystem.TEXT_SECONDARY};
+                padding: {DesignSystem.SPACING_MD}px;
+                border: none;
+                border-bottom: 1px solid {DesignSystem.BORDER_COLOR};
+                font-weight: 600;
+            }}
+        """)
+
+        layout.addWidget(self.table_commandes)
+
+        # Charger les commandes
+        self.charger_commandes_sonepar()
+
+        return widget
+
+    def creer_commande_sonepar(self):
+        """Ouvre le dialogue de création de commande Sonepar"""
+        from modules.sonepar_widgets import CreerCommandeSoneParDialog
+
+        dialog = CreerCommandeSoneParDialog(self.db, self.sonepar_client, self)
+
+        if dialog.exec():
+            data = dialog.get_data()
+
+            try:
+                # Créer la commande via l'API Sonepar
+                order = self.sonepar_client.create_order(
+                    order_lines=data['lines'],
+                    order_type=data['order_type'],
+                    customer_reference=f"GESCO-{data['chantier_id']}",
+                    delivery_address=data.get('delivery_address'),
+                    notes=data.get('notes')
+                )
+
+                # Enregistrer dans la base locale
+                order_lines_data = [
+                    {
+                        'product_id': line.product_id,
+                        'product_reference': line.product_reference,
+                        'product_description': line.product_description,
+                        'quantity': line.quantity,
+                        'unit_price': line.unit_price,
+                        'total_price': line.total_price,
+                        'line_number': line.line_number
+                    }
+                    for line in order.lines
+                ]
+
+                self.sonepar_db.link_order_to_chantier(
+                    chantier_id=data['chantier_id'],
+                    order_number=order.order_number,
+                    order_date=order.order_date,
+                    total_amount=order.total_amount,
+                    status=order.status,
+                    order_lines=order_lines_data,
+                    notes=order.notes
+                )
+
+                QMessageBox.information(
+                    self,
+                    "Commande créée",
+                    f"La commande {order.order_number} a été créée avec succès !\n"
+                    f"Montant total : {order.total_amount:.2f} €"
+                )
+
+                self.charger_commandes_sonepar()
+
+            except Exception as e:
+                QMessageBox.critical(
+                    self,
+                    "Erreur",
+                    f"Erreur lors de la création de la commande : {str(e)}"
+                )
+
+    def charger_commandes_sonepar(self):
+        """Charge les commandes Sonepar"""
+        chantier_id = self.filter_chantier_sonepar.currentData()
+
+        self.table_commandes.setRowCount(0)
+
+        # Récupérer les commandes
+        if chantier_id:
+            orders = self.sonepar_db.get_chantier_orders(chantier_id)
+        else:
+            # Tous les chantiers
+            chantiers = self.db.get_chantiers()
+            orders = []
+            for chantier in chantiers:
+                orders.extend(self.sonepar_db.get_chantier_orders(chantier['id']))
+
+        # Afficher dans le tableau
+        for order in orders:
+            row = self.table_commandes.rowCount()
+            self.table_commandes.insertRow(row)
+
+            self.table_commandes.setItem(row, 0, QTableWidgetItem(order.order_number))
+            self.table_commandes.setItem(
+                row, 1,
+                QTableWidgetItem(order.order_date.strftime("%Y-%m-%d"))
+            )
+            self.table_commandes.setItem(row, 2, QTableWidgetItem(order.chantier_name))
+            self.table_commandes.setItem(
+                row, 3,
+                QTableWidgetItem(f"{order.total_amount:.2f} €")
+            )
+
+            # Statut avec couleur
+            status_item = QTableWidgetItem(order.status.value)
+            if order.status == OrderStatus.DELIVERED:
+                status_item.setForeground(QColor(DesignSystem.SUCCESS_GREEN))
+            elif order.status == OrderStatus.CANCELLED:
+                status_item.setForeground(QColor(DesignSystem.ERROR_RED))
+            elif order.status in [OrderStatus.IN_PREPARATION, OrderStatus.READY]:
+                status_item.setForeground(QColor(DesignSystem.WARNING_ORANGE))
+
+            self.table_commandes.setItem(row, 4, status_item)
+            self.table_commandes.setItem(row, 5, QTableWidgetItem(order.notes or ""))
+
+    def closeEvent(self, event):
+        """Ferme proprement le client Sonepar"""
+        if hasattr(self, 'sonepar_client'):
+            self.sonepar_client.close()
+        event.accept()

@@ -19,6 +19,13 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from design_system import (DesignSystem, ModernLabel, ModernInput, ModernComboBox,
                            ModernTextEdit, ModernButton, ModernCard, ResponsiveDialog)
 from database import Database
+from integrations.sonepar import SoneParDatabase
+
+# Importer le widget réutilisable pour les commandes Sonepar
+try:
+    from modules.sonepar_widgets import CommandesChantierWidget
+except ImportError:
+    CommandesChantierWidget = None
 
 
 class ChantierDialog(ResponsiveDialog):
@@ -403,6 +410,26 @@ class DetailPanel(QWidget):
 
         main_layout.addWidget(card_notes)
 
+        # Carte 5: Commandes Sonepar
+        card_sonepar = ModernCard()
+        sonepar_layout = card_sonepar.card_layout
+
+        if CommandesChantierWidget:
+            # Initialiser la base Sonepar
+            sonepar_db = SoneParDatabase()
+
+            # Widget pour afficher les commandes du chantier
+            self.commandes_widget = CommandesChantierWidget(
+                db=None,  # Sera passé depuis ModuleChantiers
+                sonepar_db=sonepar_db,
+                chantier_id=None
+            )
+            sonepar_layout.addWidget(self.commandes_widget)
+        else:
+            sonepar_layout.addWidget(ModernLabel("Module Sonepar non disponible", "secondary"))
+
+        main_layout.addWidget(card_sonepar)
+
         # Espaceur pour pousser tout en haut
         main_layout.addStretch()
 
@@ -420,8 +447,9 @@ class DetailPanel(QWidget):
         card_location.hide()
         card_budget.hide()
         card_notes.hide()
+        card_sonepar.hide()
 
-        self.cards = [card_info, card_location, card_budget, card_notes]
+        self.cards = [card_info, card_location, card_budget, card_notes, card_sonepar]
 
     def display_chantier(self, chantier_data: dict):
         """Affiche les détails d'un chantier"""
@@ -482,6 +510,10 @@ class DetailPanel(QWidget):
         # Notes
         notes = chantier_data.get('notes', '')
         self.label_notes.setText(notes if notes else 'Aucune note')
+
+        # Charger les commandes Sonepar du chantier
+        if hasattr(self, 'commandes_widget') and self.commandes_widget:
+            self.commandes_widget.set_chantier(chantier_data['id'])
 
     def clear(self):
         """Efface l'affichage"""
