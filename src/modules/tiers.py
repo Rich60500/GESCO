@@ -185,7 +185,7 @@ class TiersModule(QWidget):
                     font-weight: 600;
                 }}
                 QPushButton:hover {{
-                    background-color: {DesignSystem.ACCENT_BLUE_DARK};
+                    background-color: {DesignSystem.ACCENT_BLUE};
                 }}
             """)
 
@@ -270,7 +270,7 @@ class TiersModule(QWidget):
                     border-radius: {DesignSystem.RADIUS_SM}px;
                 }}
                 QPushButton:hover {{
-                    background-color: {DesignSystem.ACCENT_GREEN};
+                    background-color: {DesignSystem.SUCCESS_GREEN};
                 }}
             """)
             actions_layout.addWidget(btn_contacts)
@@ -286,7 +286,7 @@ class TiersModule(QWidget):
                     border-radius: {DesignSystem.RADIUS_SM}px;
                 }}
                 QPushButton:hover {{
-                    background-color: {DesignSystem.ACCENT_ORANGE};
+                    background-color: {DesignSystem.WARNING_ORANGE};
                 }}
             """)
             actions_layout.addWidget(btn_addresses)
@@ -302,7 +302,7 @@ class TiersModule(QWidget):
                     border-radius: {DesignSystem.RADIUS_SM}px;
                 }}
                 QPushButton:hover {{
-                    background-color: {DesignSystem.ACCENT_RED};
+                    background-color: {DesignSystem.ERROR_RED};
                 }}
             """)
             actions_layout.addWidget(btn_delete)
@@ -806,7 +806,7 @@ class ContactsDialog(ResponsiveDialog):
                     border-radius: {DesignSystem.RADIUS_SM}px;
                 }}
                 QPushButton:hover {{
-                    background-color: {DesignSystem.ACCENT_RED};
+                    background-color: {DesignSystem.ERROR_RED};
                 }}
             """)
             actions_layout.addWidget(btn_delete)
