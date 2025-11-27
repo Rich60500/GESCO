@@ -176,7 +176,7 @@ class SoneParClient:
 
         data = self._make_request(
             'GET',
-            '/catalog/products/search',
+            '/catalog/search',
             use_catalog_limiter=True,
             params=params
         )
