@@ -1,6 +1,6 @@
 """
 GESCO v5.0 - Module Achats
-Gestion des achats avec intégration Sonepar API
+Gestion des achats : directs (manuels) et via fournisseurs API (Sonepar, etc.)
 """
 
 import sys
@@ -11,31 +11,240 @@ from datetime import datetime
 from typing import List, Optional
 
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QTableWidget,
-                               QTableWidgetItem, QHeaderView, QLineEdit, QPushButton,
-                               QMessageBox, QLabel, QTabWidget, QSpinBox, QDoubleSpinBox,
-                               QAbstractItemView, QTextEdit, QComboBox, QGroupBox, QGridLayout)
-from PySide6.QtCore import Qt, Signal, QThread
+                               QTableWidgetItem, QHeaderView, QPushButton,
+                               QMessageBox, QTabWidget, QComboBox, QDateEdit,
+                               QDoubleSpinBox, QAbstractItemView, QFileDialog)
+from PySide6.QtCore import Qt, QDate
 from PySide6.QtGui import QColor
 
 from design_system import (DesignSystem, ModernLabel, ModernInput, ModernComboBox,
                            ModernTextEdit, ModernButton, ModernCard, ResponsiveDialog)
 from database import Database
-from integrations.sonepar import (
-    SoneParClient, SoneParConfig, SoneParDatabase,
-    Product, ProductWithPricing, OrderType, OrderStatus
-)
+from integrations.sonepar import SoneParClient, SoneParConfig, SoneParDatabase
 
 
-class RechercheProduitsWidget(QWidget):
-    """Widget de recherche de produits dans le catalogue Sonepar"""
+class AjouterAchatDialog(ResponsiveDialog):
+    """Dialogue pour ajouter un achat direct"""
 
-    produit_selectionne = Signal(Product)
+    def __init__(self, db: Database, parent=None):
+        super().__init__("Nouvel Achat Direct", 700, parent)
+        self.db = db
 
-    def __init__(self, client: SoneParClient, parent=None):
+        # Section Chantier
+        section_chantier = self.add_section("Chantier")
+
+        self.combo_chantier = ModernComboBox()
+        chantiers = [c for c in self.db.get_chantiers() if c['etat'] != 'Clôturé']
+        for chantier in chantiers:
+            self.combo_chantier.addItem(f"{chantier['nom']} - {chantier['client']}", chantier['id'])
+        self.add_form_field(section_chantier, "Chantier *", self.combo_chantier)
+
+        # Section Fournisseur
+        section_fournisseur = self.add_section("Fournisseur")
+
+        self.combo_fournisseur = ModernComboBox()
+        self.combo_fournisseur.addItem("(Nouveau fournisseur...)", None)
+        fournisseurs = self.db.get_fournisseurs()
+        for f in fournisseurs:
+            self.combo_fournisseur.addItem(f['nom'], f['id'])
+        self.combo_fournisseur.currentIndexChanged.connect(self.on_fournisseur_changed)
+        self.add_form_field(section_fournisseur, "Fournisseur", self.combo_fournisseur)
+
+        self.input_nouveau_fournisseur = ModernInput("Nom du nouveau fournisseur")
+        self.input_nouveau_fournisseur.hide()
+        section_fournisseur.addWidget(self.input_nouveau_fournisseur)
+
+        # Section Achat
+        section_achat = self.add_section("Détails de l'achat")
+
+        self.combo_categorie = ModernComboBox()
+        categories = self.db.get_categories_achats()
+        for cat in categories:
+            self.combo_categorie.addItem(cat['nom'], cat['id'])
+        self.add_form_field(section_achat, "Catégorie *", self.combo_categorie)
+
+        self.date_achat = QDateEdit()
+        self.date_achat.setDate(QDate.currentDate())
+        self.date_achat.setCalendarPopup(True)
+        self.date_achat.setStyleSheet(f"""
+            QDateEdit {{
+                background-color: {DesignSystem.SURFACE};
+                border: 1px solid {DesignSystem.BORDER_COLOR};
+                border-radius: {DesignSystem.RADIUS_SM}px;
+                padding: 0 {DesignSystem.SPACING_MD}px;
+                min-height: {DesignSystem.INPUT_HEIGHT}px;
+            }}
+        """)
+        self.add_form_field(section_achat, "Date *", self.date_achat)
+
+        self.input_numero_facture = ModernInput("Numéro de facture")
+        self.add_form_field(section_achat, "N° Facture", self.input_numero_facture)
+
+        self.input_description = ModernTextEdit()
+        self.input_description.setMaximumHeight(80)
+        self.input_description.setPlaceholderText("Description de l'achat")
+        self.add_form_field(section_achat, "Description *", self.input_description)
+
+        # Section Montants
+        section_montants = self.add_section("Montants")
+
+        montants_layout = QHBoxLayout()
+        montants_layout.setSpacing(DesignSystem.SPACING_MD)
+
+        ht_layout = QVBoxLayout()
+        ht_layout.setSpacing(DesignSystem.SPACING_SM)
+        ht_layout.addWidget(ModernLabel("Montant HT (€) *"))
+        self.input_montant_ht = QDoubleSpinBox()
+        self.input_montant_ht.setRange(0, 999999.99)
+        self.input_montant_ht.setDecimals(2)
+        self.input_montant_ht.setSuffix(" €")
+        self.input_montant_ht.valueChanged.connect(self.calculer_ttc)
+        self.input_montant_ht.setStyleSheet(f"""
+            QDoubleSpinBox {{
+                background-color: {DesignSystem.SURFACE};
+                border: 1px solid {DesignSystem.BORDER_COLOR};
+                border-radius: {DesignSystem.RADIUS_SM}px;
+                padding: 0 {DesignSystem.SPACING_MD}px;
+                min-height: {DesignSystem.INPUT_HEIGHT}px;
+            }}
+        """)
+        ht_layout.addWidget(self.input_montant_ht)
+        montants_layout.addLayout(ht_layout, 1)
+
+        tva_layout = QVBoxLayout()
+        tva_layout.setSpacing(DesignSystem.SPACING_SM)
+        tva_layout.addWidget(ModernLabel("TVA (%)"))
+        self.input_tva = QDoubleSpinBox()
+        self.input_tva.setRange(0, 100)
+        self.input_tva.setDecimals(1)
+        self.input_tva.setValue(20.0)
+        self.input_tva.setSuffix(" %")
+        self.input_tva.valueChanged.connect(self.calculer_ttc)
+        self.input_tva.setStyleSheet(self.input_montant_ht.styleSheet())
+        tva_layout.addWidget(self.input_tva)
+        montants_layout.addLayout(tva_layout, 1)
+
+        ttc_layout = QVBoxLayout()
+        ttc_layout.setSpacing(DesignSystem.SPACING_SM)
+        ttc_layout.addWidget(ModernLabel("Montant TTC (€)"))
+        self.input_montant_ttc = QDoubleSpinBox()
+        self.input_montant_ttc.setRange(0, 999999.99)
+        self.input_montant_ttc.setDecimals(2)
+        self.input_montant_ttc.setSuffix(" €")
+        self.input_montant_ttc.setReadOnly(True)
+        self.input_montant_ttc.setStyleSheet(f"""
+            QDoubleSpinBox {{
+                background-color: {DesignSystem.SURFACE_ELEVATED};
+                border: 1px solid {DesignSystem.BORDER_COLOR};
+                border-radius: {DesignSystem.RADIUS_SM}px;
+                padding: 0 {DesignSystem.SPACING_MD}px;
+                min-height: {DesignSystem.INPUT_HEIGHT}px;
+                color: {DesignSystem.TEXT_SECONDARY};
+            }}
+        """)
+        ttc_layout.addWidget(self.input_montant_ttc)
+        montants_layout.addLayout(ttc_layout, 1)
+
+        section_montants.addLayout(montants_layout)
+
+        # Section Paiement
+        section_paiement = self.add_section("Paiement")
+
+        self.combo_paiement = ModernComboBox()
+        self.combo_paiement.addItems(["Carte bancaire", "Chèque", "Virement", "Espèces", "Autre"])
+        self.add_form_field(section_paiement, "Moyen de paiement", self.combo_paiement)
+
+        self.input_reference = ModernInput("Numéro de chèque, référence virement, etc.")
+        self.add_form_field(section_paiement, "Référence", self.input_reference)
+
+        # Section Notes
+        section_notes = self.add_section("Notes")
+
+        self.input_notes = ModernTextEdit()
+        self.input_notes.setMaximumHeight(60)
+        self.input_notes.setPlaceholderText("Notes complémentaires (optionnel)")
+        section_notes.addWidget(self.input_notes)
+
+        # Boutons
+        btn_annuler = ModernButton("Annuler", "secondary")
+        btn_annuler.clicked.connect(self.reject)
+
+        btn_ajouter = ModernButton("Ajouter l'achat", "success")
+        btn_ajouter.clicked.connect(self.valider)
+
+        self.add_button_bar([btn_annuler, btn_ajouter])
+
+    def on_fournisseur_changed(self):
+        """Affiche/cache le champ nouveau fournisseur"""
+        if self.combo_fournisseur.currentData() is None:
+            self.input_nouveau_fournisseur.show()
+        else:
+            self.input_nouveau_fournisseur.hide()
+
+    def calculer_ttc(self):
+        """Calcule automatiquement le montant TTC"""
+        ht = self.input_montant_ht.value()
+        tva = self.input_tva.value()
+        ttc = ht * (1 + tva / 100)
+        self.input_montant_ttc.setValue(ttc)
+
+    def valider(self):
+        """Valide les données"""
+        if self.combo_chantier.count() == 0:
+            QMessageBox.warning(self, "Aucun chantier", "Créez d'abord un chantier.")
+            return
+
+        if not self.input_description.toPlainText().strip():
+            QMessageBox.warning(self, "Champ manquant", "La description est obligatoire.")
+            return
+
+        if self.input_montant_ht.value() == 0:
+            QMessageBox.warning(self, "Montant invalide", "Le montant HT doit être supérieur à 0.")
+            return
+
+        self.accept()
+
+    def get_data(self):
+        """Retourne les données de l'achat"""
+        fournisseur_id = self.combo_fournisseur.currentData()
+        fournisseur_nom = None
+
+        if fournisseur_id is None:
+            # Nouveau fournisseur
+            fournisseur_nom = self.input_nouveau_fournisseur.text().strip()
+            if fournisseur_nom:
+                # Créer le fournisseur
+                fournisseur_id = self.db.ajouter_fournisseur({
+                    'nom': fournisseur_nom,
+                    'type': 'Autre'
+                })
+        else:
+            # Récupérer le nom du fournisseur existant
+            fournisseur_nom = self.combo_fournisseur.currentText()
+
+        return {
+            'chantier_id': self.combo_chantier.currentData(),
+            'fournisseur_id': fournisseur_id,
+            'fournisseur_nom': fournisseur_nom,
+            'categorie_id': self.combo_categorie.currentData(),
+            'date_achat': self.date_achat.date().toString("yyyy-MM-dd"),
+            'numero_facture': self.input_numero_facture.text().strip(),
+            'description': self.input_description.toPlainText().strip(),
+            'montant_ht': self.input_montant_ht.value(),
+            'montant_ttc': self.input_montant_ttc.value(),
+            'tva': self.input_tva.value(),
+            'moyen_paiement': self.combo_paiement.currentText(),
+            'reference_paiement': self.input_reference.text().strip(),
+            'notes': self.input_notes.toPlainText().strip()
+        }
+
+
+class AchatsDirectsWidget(QWidget):
+    """Widget pour les achats directs (saisie manuelle)"""
+
+    def __init__(self, db: Database, parent=None):
         super().__init__(parent)
-
-        self.client = client
-        self.produits_results = []
+        self.db = db
 
         # Layout principal
         layout = QVBoxLayout(self)
@@ -48,52 +257,73 @@ class RechercheProduitsWidget(QWidget):
         layout.setSpacing(DesignSystem.SPACING_LG)
 
         # En-tête
-        title_label = ModernLabel("Recherche Catalogue Sonepar", "large")
-        layout.addWidget(title_label)
+        header_layout = QHBoxLayout()
 
-        # Barre de recherche
-        search_layout = QHBoxLayout()
-        search_layout.setSpacing(DesignSystem.SPACING_SM)
+        title_label = ModernLabel("Achats Directs", "large")
+        header_layout.addWidget(title_label)
 
-        self.search_input = ModernInput("Référence, EAN ou description...")
-        self.search_input.returnPressed.connect(self.rechercher_produits)
-        search_layout.addWidget(self.search_input)
+        header_layout.addStretch()
 
-        btn_rechercher = ModernButton("Rechercher", "primary")
-        btn_rechercher.clicked.connect(self.rechercher_produits)
-        search_layout.addWidget(btn_rechercher)
+        btn_nouvel_achat = ModernButton("+ Nouvel achat", "primary")
+        btn_nouvel_achat.clicked.connect(self.ajouter_achat)
+        header_layout.addWidget(btn_nouvel_achat)
 
-        layout.addLayout(search_layout)
+        layout.addLayout(header_layout)
 
         # Info
         info_label = ModernLabel(
-            "💡 Recherchez par référence, code EAN ou mots-clés dans la description",
+            "💡 Saisissez ici vos achats manuels : tickets, factures locales, etc.",
             "secondary"
         )
         layout.addWidget(info_label)
 
-        # Tableau des résultats
+        # Filtres
+        filters_layout = QHBoxLayout()
+        filters_layout.setSpacing(DesignSystem.SPACING_SM)
+
+        filters_layout.addWidget(ModernLabel("Filtrer :"))
+
+        self.filter_chantier = ModernComboBox()
+        self.filter_chantier.addItem("Tous les chantiers", None)
+        chantiers = self.db.get_chantiers()
+        for c in chantiers:
+            self.filter_chantier.addItem(c['nom'], c['id'])
+        self.filter_chantier.currentIndexChanged.connect(self.charger_achats)
+        filters_layout.addWidget(self.filter_chantier, 1)
+
+        self.filter_categorie = ModernComboBox()
+        self.filter_categorie.addItem("Toutes catégories", None)
+        categories = self.db.get_categories_achats()
+        for cat in categories:
+            self.filter_categorie.addItem(cat['nom'], cat['id'])
+        self.filter_categorie.currentIndexChanged.connect(self.charger_achats)
+        filters_layout.addWidget(self.filter_categorie, 1)
+
+        filters_layout.addStretch()
+
+        layout.addLayout(filters_layout)
+
+        # Tableau des achats
         self.table = QTableWidget()
-        self.table.setColumnCount(6)
+        self.table.setColumnCount(8)
         self.table.setHorizontalHeaderLabels([
-            "Référence", "Description", "Marque", "EAN", "Conditionnement", "Unité"
+            "Date", "Chantier", "Catégorie", "Fournisseur",
+            "Description", "Montant HT", "Montant TTC", "N° Facture"
         ])
 
-        self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
-        self.table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
-        self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
-        self.table.verticalHeader().setVisible(False)
-        self.table.setAlternatingRowColors(True)
-
-        # Ajuster les colonnes
         header = self.table.horizontalHeader()
         header.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
         header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
         header.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
         header.setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
-        header.setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(4, QHeaderView.ResizeMode.Stretch)
         header.setSectionResizeMode(5, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(6, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(7, QHeaderView.ResizeMode.ResizeToContents)
 
+        self.table.verticalHeader().setVisible(False)
+        self.table.setAlternatingRowColors(True)
+        self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.table.setStyleSheet(f"""
             QTableWidget {{
                 background-color: {DesignSystem.SURFACE};
@@ -118,370 +348,80 @@ class RechercheProduitsWidget(QWidget):
             }}
         """)
 
-        self.table.doubleClicked.connect(self.on_produit_double_click)
-
         layout.addWidget(self.table)
 
-        # Boutons
-        actions_layout = QHBoxLayout()
-        actions_layout.setSpacing(DesignSystem.SPACING_SM)
+        # Totaux
+        totaux_layout = QHBoxLayout()
+        totaux_layout.addStretch()
 
-        btn_voir_prix = ModernButton("Voir Prix & Stock", "primary")
-        btn_voir_prix.clicked.connect(self.voir_prix_stock)
-        actions_layout.addWidget(btn_voir_prix)
+        self.label_total = ModernLabel("Total : 0.00 € TTC", "title")
+        totaux_layout.addWidget(self.label_total)
 
-        actions_layout.addStretch()
+        layout.addLayout(totaux_layout)
 
-        self.label_results = ModernLabel("", "secondary")
-        actions_layout.addWidget(self.label_results)
+        # Charger les achats
+        self.charger_achats()
 
-        layout.addLayout(actions_layout)
+    def ajouter_achat(self):
+        """Ouvre le dialogue d'ajout d'achat"""
+        dialog = AjouterAchatDialog(self.db, self)
 
-    def rechercher_produits(self):
-        """Recherche des produits dans le catalogue"""
-        query = self.search_input.text().strip()
+        if dialog.exec():
+            data = dialog.get_data()
 
-        if not query:
-            QMessageBox.warning(self, "Champ vide", "Veuillez saisir un terme de recherche.")
-            return
+            try:
+                self.db.ajouter_achat_direct(data)
+                QMessageBox.information(self, "Succès", "L'achat a été enregistré.")
+                self.charger_achats()
+            except Exception as e:
+                QMessageBox.critical(self, "Erreur", f"Erreur lors de l'enregistrement : {str(e)}")
 
-        try:
-            # Afficher un message de chargement
-            self.label_results.setText("🔄 Recherche en cours...")
-            self.table.setRowCount(0)
+    def charger_achats(self):
+        """Charge les achats depuis la base"""
+        chantier_id = self.filter_chantier.currentData()
+        categorie_id = self.filter_categorie.currentData()
 
-            # Rechercher (avec rate limiting automatique)
-            self.produits_results = self.client.search_products(query, limit=100)
+        achats = self.db.get_achats_directs(chantier_id=chantier_id, categorie_id=categorie_id)
 
-            # Afficher les résultats
-            self.afficher_produits(self.produits_results)
-
-            self.label_results.setText(f"✓ {len(self.produits_results)} produit(s) trouvé(s)")
-
-        except Exception as e:
-            QMessageBox.critical(self, "Erreur", f"Erreur lors de la recherche : {str(e)}")
-            self.label_results.setText("✗ Erreur de recherche")
-
-    def afficher_produits(self, produits: List[Product]):
-        """Affiche les produits dans le tableau"""
         self.table.setRowCount(0)
+        total = 0.0
 
-        for produit in produits:
+        for achat in achats:
             row = self.table.rowCount()
             self.table.insertRow(row)
 
-            # Référence
-            item_ref = QTableWidgetItem(produit.reference)
-            item_ref.setData(Qt.ItemDataRole.UserRole, produit)
+            self.table.setItem(row, 0, QTableWidgetItem(achat['date_achat']))
+            self.table.setItem(row, 1, QTableWidgetItem(achat['chantier_nom'] or '-'))
+            self.table.setItem(row, 2, QTableWidgetItem(achat['categorie_nom'] or '-'))
+            self.table.setItem(row, 3, QTableWidgetItem(achat['fournisseur_nom'] or '-'))
+            self.table.setItem(row, 4, QTableWidgetItem(achat['description'][:50] + '...'))
+            self.table.setItem(row, 5, QTableWidgetItem(f"{achat['montant_ht']:.2f} €"))
+            self.table.setItem(row, 6, QTableWidgetItem(f"{achat['montant_ttc']:.2f} €"))
+            self.table.setItem(row, 7, QTableWidgetItem(achat['numero_facture'] or '-'))
 
-            # Description
-            item_desc = QTableWidgetItem(produit.description)
+            total += achat['montant_ttc']
 
-            # Marque
-            item_brand = QTableWidgetItem(produit.brand.name)
-
-            # EAN
-            item_ean = QTableWidgetItem(produit.ean)
-
-            # Conditionnement
-            item_pack = QTableWidgetItem(str(produit.packaging))
-
-            # Unité
-            item_unit = QTableWidgetItem(produit.unit)
-
-            self.table.setItem(row, 0, item_ref)
-            self.table.setItem(row, 1, item_desc)
-            self.table.setItem(row, 2, item_brand)
-            self.table.setItem(row, 3, item_ean)
-            self.table.setItem(row, 4, item_pack)
-            self.table.setItem(row, 5, item_unit)
-
-    def voir_prix_stock(self):
-        """Affiche les prix et stock du produit sélectionné"""
-        selected_items = self.table.selectedItems()
-
-        if not selected_items:
-            QMessageBox.warning(self, "Aucune sélection", "Veuillez sélectionner un produit.")
-            return
-
-        produit = self.table.item(selected_items[0].row(), 0).data(Qt.ItemDataRole.UserRole)
-
-        try:
-            # Récupérer prix et stock
-            results = self.client.get_prices_and_stocks([produit.reference])
-
-            if results:
-                result = results[0]
-                self.afficher_details_produit(result)
-            else:
-                QMessageBox.information(
-                    self,
-                    "Aucune donnée",
-                    "Aucune information de prix ou stock disponible pour ce produit."
-                )
-
-        except Exception as e:
-            QMessageBox.critical(self, "Erreur", f"Erreur lors de la récupération : {str(e)}")
-
-    def afficher_details_produit(self, produit_pricing: ProductWithPricing):
-        """Affiche les détails d'un produit avec prix et stock"""
-        produit = produit_pricing.product
-        price = produit_pricing.price
-        stock = produit_pricing.stock
-
-        details = f"""
-<h3>{produit.description}</h3>
-<p><b>Référence:</b> {produit.reference}<br>
-<b>Marque:</b> {produit.brand.name}<br>
-<b>EAN:</b> {produit.ean}</p>
-"""
-
-        if price:
-            details += f"""
-<h4>Prix</h4>
-<p><b>Prix net:</b> {price.net_price:.2f} {price.currency}<br>
-<b>Prix brut:</b> {price.gross_price:.2f} {price.currency}<br>
-<b>Remise:</b> {price.discount_rate:.1f}%<br>
-<b>Unité:</b> {price.unit}</p>
-"""
-
-        if stock:
-            details += f"""
-<h4>Stock</h4>
-<p><b>Quantité disponible:</b> {stock.quantity}<br>
-<b>Type:</b> {stock.stock_type.value}<br>
-<b>Emplacement:</b> {stock.location or 'Non spécifié'}</p>
-"""
-
-        msg = QMessageBox(self)
-        msg.setWindowTitle("Détails du produit")
-        msg.setTextFormat(Qt.TextFormat.RichText)
-        msg.setText(details)
-        msg.setIcon(QMessageBox.Icon.Information)
-        msg.exec()
-
-    def on_produit_double_click(self):
-        """Émet le signal de sélection de produit"""
-        selected_items = self.table.selectedItems()
-
-        if selected_items:
-            produit = self.table.item(selected_items[0].row(), 0).data(Qt.ItemDataRole.UserRole)
-            self.produit_selectionne.emit(produit)
-
-
-class CreerCommandeDialog(ResponsiveDialog):
-    """Dialogue pour créer une commande Sonepar"""
-
-    def __init__(self, client: SoneParClient, db: Database, parent=None):
-        super().__init__("Nouvelle Commande Sonepar", 800, parent)
-
-        self.client = client
-        self.db = db
-        self.lignes_commande = []
-
-        # Section Chantier
-        section_chantier = self.add_section("Chantier")
-
-        self.combo_chantier = ModernComboBox()
-        self.charger_chantiers()
-        self.add_form_field(section_chantier, "Chantier *", self.combo_chantier)
-
-        # Section Type de commande
-        section_type = self.add_section("Type de commande")
-
-        self.combo_type = ModernComboBox()
-        self.combo_type.addItems(["STANDARD", "EXPRESS", "DEPOT"])
-        self.add_form_field(section_type, "Type *", self.combo_type)
-
-        # Section Adresse de livraison
-        section_adresse = self.add_section("Livraison")
-
-        self.input_adresse = ModernTextEdit()
-        self.input_adresse.setMaximumHeight(80)
-        self.input_adresse.setPlaceholderText("Adresse de livraison (optionnelle, sinon adresse du chantier)")
-        section_adresse.addWidget(self.input_adresse)
-
-        # Section Lignes de commande
-        section_lignes = self.add_section("Lignes de commande")
-
-        # Ajout de ligne
-        add_line_layout = QHBoxLayout()
-        add_line_layout.setSpacing(DesignSystem.SPACING_SM)
-
-        self.input_reference = ModernInput("Référence produit")
-        add_line_layout.addWidget(self.input_reference, 2)
-
-        self.input_quantite = QSpinBox()
-        self.input_quantite.setMinimum(1)
-        self.input_quantite.setMaximum(9999)
-        self.input_quantite.setValue(1)
-        self.input_quantite.setStyleSheet(f"""
-            QSpinBox {{
-                background-color: {DesignSystem.SURFACE};
-                border: 1px solid {DesignSystem.BORDER_COLOR};
-                border-radius: {DesignSystem.RADIUS_SM}px;
-                padding: 0 {DesignSystem.SPACING_MD}px;
-                min-height: {DesignSystem.INPUT_HEIGHT}px;
-            }}
-        """)
-        add_line_layout.addWidget(self.input_quantite, 1)
-
-        btn_ajouter_ligne = ModernButton("+ Ajouter", "primary")
-        btn_ajouter_ligne.clicked.connect(self.ajouter_ligne)
-        add_line_layout.addWidget(btn_ajouter_ligne)
-
-        section_lignes.addLayout(add_line_layout)
-
-        # Liste des lignes
-        self.table_lignes = QTableWidget()
-        self.table_lignes.setColumnCount(3)
-        self.table_lignes.setHorizontalHeaderLabels(["Référence", "Quantité", ""])
-        self.table_lignes.horizontalHeader().setStretchLastSection(False)
-        self.table_lignes.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
-        self.table_lignes.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
-        self.table_lignes.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
-        self.table_lignes.setMaximumHeight(200)
-        self.table_lignes.verticalHeader().setVisible(False)
-        section_lignes.addWidget(self.table_lignes)
-
-        # Section Notes
-        section_notes = self.add_section("Notes")
-
-        self.input_notes = ModernTextEdit()
-        self.input_notes.setMaximumHeight(80)
-        self.input_notes.setPlaceholderText("Notes sur la commande (optionnel)")
-        section_notes.addWidget(self.input_notes)
-
-        # Boutons
-        btn_annuler = ModernButton("Annuler", "secondary")
-        btn_annuler.clicked.connect(self.reject)
-
-        btn_creer = ModernButton("Créer la commande", "success")
-        btn_creer.clicked.connect(self.valider)
-
-        self.add_button_bar([btn_annuler, btn_creer])
-
-    def charger_chantiers(self):
-        """Charge la liste des chantiers actifs"""
-        # Récupérer les chantiers non clôturés
-        chantiers = [c for c in self.db.get_chantiers() if c['etat'] != 'Clôturé']
-
-        for chantier in chantiers:
-            self.combo_chantier.addItem(
-                f"{chantier['nom']} - {chantier['client']}",
-                chantier['id']
-            )
-
-    def ajouter_ligne(self):
-        """Ajoute une ligne de commande"""
-        reference = self.input_reference.text().strip()
-        quantite = self.input_quantite.value()
-
-        if not reference:
-            QMessageBox.warning(self, "Champ manquant", "Veuillez saisir une référence produit.")
-            return
-
-        # Ajouter à la liste
-        self.lignes_commande.append({
-            'reference': reference,
-            'quantity': quantite
-        })
-
-        # Ajouter au tableau
-        row = self.table_lignes.rowCount()
-        self.table_lignes.insertRow(row)
-
-        self.table_lignes.setItem(row, 0, QTableWidgetItem(reference))
-        self.table_lignes.setItem(row, 1, QTableWidgetItem(str(quantite)))
-
-        btn_supprimer = ModernButton("✕", "danger")
-        btn_supprimer.setFixedWidth(40)
-        btn_supprimer.clicked.connect(lambda: self.supprimer_ligne(row))
-        self.table_lignes.setCellWidget(row, 2, btn_supprimer)
-
-        # Réinitialiser les champs
-        self.input_reference.clear()
-        self.input_quantite.setValue(1)
-        self.input_reference.setFocus()
-
-    def supprimer_ligne(self, row: int):
-        """Supprime une ligne de commande"""
-        self.table_lignes.removeRow(row)
-        if row < len(self.lignes_commande):
-            self.lignes_commande.pop(row)
-
-    def valider(self):
-        """Valide et crée la commande"""
-        if self.combo_chantier.count() == 0:
-            QMessageBox.warning(self, "Aucun chantier", "Aucun chantier disponible. Créez un chantier d'abord.")
-            return
-
-        if not self.lignes_commande:
-            QMessageBox.warning(self, "Commande vide", "Ajoutez au moins une ligne de commande.")
-            return
-
-        self.accept()
-
-    def get_data(self):
-        """Retourne les données de la commande"""
-        return {
-            'chantier_id': self.combo_chantier.currentData(),
-            'order_type': OrderType[self.combo_type.currentText()],
-            'delivery_address': self.input_adresse.toPlainText().strip() or None,
-            'lines': self.lignes_commande,
-            'notes': self.input_notes.toPlainText().strip() or None
-        }
+        self.label_total.setText(f"Total : {total:.2f} € TTC")
 
 
 class ModuleAchats(QWidget):
-    """Module de gestion des achats avec intégration Sonepar"""
+    """Module de gestion des achats : directs + fournisseurs API"""
 
     def __init__(self, db: Database, parent=None):
         super().__init__(parent)
-
         self.db = db
-
-        # Initialiser le client Sonepar
-        self.sonepar_config = SoneParConfig()
-        self.sonepar_client = SoneParClient(self.sonepar_config)
-        self.sonepar_db = SoneParDatabase()
 
         # Layout principal
         main_layout = QVBoxLayout(self)
-        main_layout.setContentsMargins(
-            DesignSystem.SPACING_XL,
-            DesignSystem.SPACING_XL,
-            DesignSystem.SPACING_XL,
-            DesignSystem.SPACING_XL
-        )
-        main_layout.setSpacing(DesignSystem.SPACING_LG)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(0)
 
-        # En-tête
-        header_layout = QHBoxLayout()
-
-        title_label = ModernLabel("Achats & Sonepar", "large")
-        header_layout.addWidget(title_label)
-
-        header_layout.addStretch()
-
-        # Indicateur environnement
-        env_text = "🔴 PROD" if self.sonepar_config.use_production else "🟢 TEST"
-        env_label = ModernLabel(env_text, "secondary")
-        header_layout.addWidget(env_label)
-
-        btn_nouvelle_commande = ModernButton("+ Nouvelle commande", "primary")
-        btn_nouvelle_commande.clicked.connect(self.creer_commande)
-        header_layout.addWidget(btn_nouvelle_commande)
-
-        main_layout.addLayout(header_layout)
-
-        # Onglets
+        # Onglets principaux
         self.tabs = QTabWidget()
         self.tabs.setStyleSheet(f"""
             QTabWidget::pane {{
-                border: 1px solid {DesignSystem.BORDER_COLOR};
-                border-radius: {DesignSystem.RADIUS_MD}px;
-                background-color: {DesignSystem.SURFACE};
+                border: none;
+                background-color: {DesignSystem.BACKGROUND};
             }}
             QTabBar::tab {{
                 background-color: {DesignSystem.SURFACE_ELEVATED};
@@ -489,210 +429,69 @@ class ModuleAchats(QWidget):
                 border-bottom: none;
                 border-top-left-radius: {DesignSystem.RADIUS_SM}px;
                 border-top-right-radius: {DesignSystem.RADIUS_SM}px;
-                padding: {DesignSystem.SPACING_MD}px {DesignSystem.SPACING_LG}px;
+                padding: {DesignSystem.SPACING_MD}px {DesignSystem.SPACING_XL}px;
                 margin-right: 2px;
+                margin-left: {DesignSystem.SPACING_LG}px;
+                font-size: {DesignSystem.FONT_SIZE_BODY}px;
+                font-weight: 500;
+            }}
+            QTabBar::tab:first {{
+                margin-left: {DesignSystem.SPACING_XL}px;
             }}
             QTabBar::tab:selected {{
-                background-color: {DesignSystem.SURFACE};
-                border-bottom: none;
+                background-color: {DesignSystem.BACKGROUND};
+                color: {DesignSystem.ACCENT_BLUE};
+                font-weight: 600;
             }}
-            QTabBar::tab:hover {{
+            QTabBar::tab:hover:!selected {{
                 background-color: {DesignSystem.SURFACE};
             }}
         """)
 
-        # Onglet 1: Recherche catalogue
-        self.recherche_widget = RechercheProduitsWidget(self.sonepar_client)
-        self.tabs.addTab(self.recherche_widget, "🔍 Catalogue")
+        # Onglet 1 : Achats directs (saisie manuelle)
+        self.achats_directs_widget = AchatsDirectsWidget(self.db)
+        self.tabs.addTab(self.achats_directs_widget, "📝 Achats Directs")
 
-        # Onglet 2: Commandes
-        self.commandes_widget = self.creer_onglet_commandes()
-        self.tabs.addTab(self.commandes_widget, "📦 Commandes")
+        # Onglet 2 : Fournisseurs API (Sonepar, etc.)
+        try:
+            from modules.achats_old import RechercheProduitsWidget, CreerCommandeDialog
 
-        # Onglet 3: Livraisons
-        self.livraisons_widget = self.creer_onglet_livraisons()
-        self.tabs.addTab(self.livraisons_widget, "🚚 Livraisons")
+            # Créer l'onglet Sonepar
+            sonepar_widget = QWidget()
+            sonepar_layout = QVBoxLayout(sonepar_widget)
+            sonepar_layout.setContentsMargins(0, 0, 0, 0)
+
+            # Sous-onglets pour Sonepar
+            sonepar_tabs = QTabWidget()
+            sonepar_tabs.setStyleSheet(self.tabs.styleSheet())
+
+            # Initialiser clients Sonepar
+            sonepar_config = SoneParConfig()
+            sonepar_client = SoneParClient(sonepar_config)
+
+            # Catalogue
+            recherche_widget = RechercheProduitsWidget(sonepar_client)
+            sonepar_tabs.addTab(recherche_widget, "🔍 Catalogue")
+
+            # Commandes (à implémenter proprement)
+            commandes_widget = QWidget()
+            commandes_layout = QVBoxLayout(commandes_widget)
+            commandes_layout.addWidget(ModernLabel("Commandes Sonepar", "large"))
+            commandes_layout.addWidget(ModernLabel("En cours de développement...", "secondary"))
+            commandes_layout.addStretch()
+            sonepar_tabs.addTab(commandes_widget, "📦 Commandes")
+
+            sonepar_layout.addWidget(sonepar_tabs)
+
+            self.tabs.addTab(sonepar_widget, "🔌 Fournisseurs API")
+
+        except ImportError:
+            # Si l'ancien module n'est pas disponible
+            placeholder = QWidget()
+            placeholder_layout = QVBoxLayout(placeholder)
+            placeholder_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            placeholder_layout.addWidget(ModernLabel("🚧 Module Fournisseurs API", "large"))
+            placeholder_layout.addWidget(ModernLabel("En cours de développement", "secondary"))
+            self.tabs.addTab(placeholder, "🔌 Fournisseurs API")
 
         main_layout.addWidget(self.tabs)
-
-    def creer_onglet_commandes(self) -> QWidget:
-        """Crée l'onglet des commandes"""
-        widget = QWidget()
-        layout = QVBoxLayout(widget)
-        layout.setContentsMargins(
-            DesignSystem.SPACING_LG,
-            DesignSystem.SPACING_LG,
-            DesignSystem.SPACING_LG,
-            DesignSystem.SPACING_LG
-        )
-
-        # Filtre par chantier
-        filter_layout = QHBoxLayout()
-        filter_layout.addWidget(ModernLabel("Filtrer par chantier:"))
-
-        self.filter_chantier = ModernComboBox()
-        self.filter_chantier.addItem("Tous les chantiers", None)
-
-        chantiers = self.db.get_chantiers()
-        for chantier in chantiers:
-            self.filter_chantier.addItem(chantier['nom'], chantier['id'])
-
-        self.filter_chantier.currentIndexChanged.connect(self.filtrer_commandes)
-        filter_layout.addWidget(self.filter_chantier, 1)
-
-        filter_layout.addStretch()
-
-        layout.addLayout(filter_layout)
-
-        # Tableau des commandes
-        self.table_commandes = QTableWidget()
-        self.table_commandes.setColumnCount(6)
-        self.table_commandes.setHorizontalHeaderLabels([
-            "N° Commande", "Date", "Chantier", "Montant", "Statut", "Notes"
-        ])
-
-        header = self.table_commandes.horizontalHeader()
-        header.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
-        header.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
-        header.setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
-        header.setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
-        header.setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)
-        header.setSectionResizeMode(5, QHeaderView.ResizeMode.Stretch)
-
-        self.table_commandes.verticalHeader().setVisible(False)
-        self.table_commandes.setAlternatingRowColors(True)
-        self.table_commandes.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
-
-        layout.addWidget(self.table_commandes)
-
-        self.charger_commandes()
-
-        return widget
-
-    def creer_onglet_livraisons(self) -> QWidget:
-        """Crée l'onglet des livraisons"""
-        widget = QWidget()
-        layout = QVBoxLayout(widget)
-        layout.setContentsMargins(
-            DesignSystem.SPACING_LG,
-            DesignSystem.SPACING_LG,
-            DesignSystem.SPACING_LG,
-            DesignSystem.SPACING_LG
-        )
-
-        info_label = ModernLabel("📦 Bons de livraison à venir...", "title")
-        info_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        layout.addWidget(info_label)
-
-        layout.addStretch()
-
-        return widget
-
-    def creer_commande(self):
-        """Ouvre le dialogue de création de commande"""
-        dialog = CreerCommandeDialog(self.sonepar_client, self.db, self)
-
-        if dialog.exec():
-            data = dialog.get_data()
-
-            try:
-                # Créer la commande via l'API Sonepar
-                order = self.sonepar_client.create_order(
-                    order_lines=data['lines'],
-                    order_type=data['order_type'],
-                    customer_reference=f"GESCO-{data['chantier_id']}",
-                    delivery_address=data.get('delivery_address'),
-                    notes=data.get('notes')
-                )
-
-                # Enregistrer dans la base locale
-                order_lines_data = [
-                    {
-                        'product_id': line.product_id,
-                        'product_reference': line.product_reference,
-                        'product_description': line.product_description,
-                        'quantity': line.quantity,
-                        'unit_price': line.unit_price,
-                        'total_price': line.total_price,
-                        'line_number': line.line_number
-                    }
-                    for line in order.lines
-                ]
-
-                self.sonepar_db.link_order_to_chantier(
-                    chantier_id=data['chantier_id'],
-                    order_number=order.order_number,
-                    order_date=order.order_date,
-                    total_amount=order.total_amount,
-                    status=order.status,
-                    order_lines=order_lines_data,
-                    notes=order.notes
-                )
-
-                QMessageBox.information(
-                    self,
-                    "Commande créée",
-                    f"La commande {order.order_number} a été créée avec succès !\n"
-                    f"Montant total : {order.total_amount:.2f} €"
-                )
-
-                self.charger_commandes()
-
-            except Exception as e:
-                QMessageBox.critical(
-                    self,
-                    "Erreur",
-                    f"Erreur lors de la création de la commande : {str(e)}"
-                )
-
-    def charger_commandes(self, chantier_id: Optional[int] = None):
-        """Charge toutes les commandes ou celles d'un chantier spécifique"""
-        self.table_commandes.setRowCount(0)
-
-        # Récupérer toutes les commandes de tous les chantiers
-        if chantier_id:
-            orders = self.sonepar_db.get_chantier_orders(chantier_id)
-        else:
-            # Récupérer pour tous les chantiers
-            chantiers = self.db.get_chantiers()
-            orders = []
-            for chantier in chantiers:
-                orders.extend(self.sonepar_db.get_chantier_orders(chantier['id']))
-
-        # Afficher dans le tableau
-        for order in orders:
-            row = self.table_commandes.rowCount()
-            self.table_commandes.insertRow(row)
-
-            self.table_commandes.setItem(row, 0, QTableWidgetItem(order.order_number))
-            self.table_commandes.setItem(
-                row, 1,
-                QTableWidgetItem(order.order_date.strftime("%Y-%m-%d"))
-            )
-            self.table_commandes.setItem(row, 2, QTableWidgetItem(order.chantier_name))
-            self.table_commandes.setItem(
-                row, 3,
-                QTableWidgetItem(f"{order.total_amount:.2f} €")
-            )
-
-            # Statut avec couleur
-            status_item = QTableWidgetItem(order.status.value)
-            if order.status == OrderStatus.DELIVERED:
-                status_item.setForeground(QColor(DesignSystem.SUCCESS_GREEN))
-            elif order.status == OrderStatus.CANCELLED:
-                status_item.setForeground(QColor(DesignSystem.ERROR_RED))
-            elif order.status in [OrderStatus.IN_PREPARATION, OrderStatus.READY]:
-                status_item.setForeground(QColor(DesignSystem.WARNING_ORANGE))
-
-            self.table_commandes.setItem(row, 4, status_item)
-            self.table_commandes.setItem(row, 5, QTableWidgetItem(order.notes or ""))
-
-    def filtrer_commandes(self):
-        """Filtre les commandes par chantier"""
-        chantier_id = self.filter_chantier.currentData()
-        self.charger_commandes(chantier_id)
-
-    def closeEvent(self, event):
-        """Ferme proprement le client Sonepar"""
-        self.sonepar_client.close()
-        event.accept()
