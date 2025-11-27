@@ -12,9 +12,14 @@ class SoneParConfig:
     """Configuration pour l'API Sonepar"""
 
     # Identifiants API (DENIS EURL)
-    api_key: str = "95791076"
+    api_key: str = "95791076"  # Ocp-Apim-Subscription-Key
     customer_code: str = "4146EB1"
     org_id: str = "5QD"
+
+    # Authentification utilisateur (à configurer)
+    # Ces identifiants doivent être encodés en Base64
+    user_id: str = ""  # TODO: Remplir avec l'identifiant utilisateur Sonepar
+    user_password: str = ""  # TODO: Remplir avec le mot de passe Sonepar
 
     # URLs des environnements
     base_url_test: str = "https://apitst.sonepar.fr/api"
@@ -27,11 +32,11 @@ class SoneParConfig:
     timeout: int = 30  # secondes
     max_retries: int = 3
 
-    # Rate limiting
+    # Rate limiting (selon doc API Sonepar)
     rate_limit_calls: int = 10
     rate_limit_period: int = 60  # secondes
 
-    # Rate limiting catalogue (plus restrictif)
+    # Rate limiting catalogue (plus restrictif : 5/seconde)
     catalog_rate_limit_calls: int = 5
     catalog_rate_limit_period: int = 1  # secondes
 
@@ -42,14 +47,33 @@ class SoneParConfig:
 
     @property
     def headers(self) -> dict:
-        """Retourne les headers HTTP pour les requêtes"""
-        return {
-            "X-API-Key": self.api_key,
-            "X-Customer-Code": self.customer_code,
-            "X-Org-Id": self.org_id,
+        """Retourne les headers HTTP pour les requêtes (selon doc API v1.4)"""
+        import base64
+
+        headers = {
+            "Ocp-Apim-Subscription-Key": self.api_key,
+            "customerCode": self.customer_code,
+            "orgId": self.org_id,
             "Content-Type": "application/json",
             "Accept": "application/json"
         }
+
+        # Ajouter l'authentification user/pass si configurée
+        if self.user_id and self.user_password:
+            # Encoder en Base64 si ce n'est pas déjà fait
+            try:
+                base64.b64decode(self.user_id)
+                headers["X-snp-user"] = self.user_id
+            except:
+                headers["X-snp-user"] = base64.b64encode(self.user_id.encode()).decode()
+
+            try:
+                base64.b64decode(self.user_password)
+                headers["X-snp-pass"] = self.user_password
+            except:
+                headers["X-snp-pass"] = base64.b64encode(self.user_password.encode()).decode()
+
+        return headers
 
     def get_endpoint(self, path: str) -> str:
         """

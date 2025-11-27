@@ -156,51 +156,87 @@ class SoneParClient:
         limit: int = 50
     ) -> List[Product]:
         """
-        Recherche des produits dans le catalogue
+        Recherche des produits dans le catalogue Sonepar
+
+        NOTE: L'API Sonepar ne supporte PAS la recherche textuelle directe.
+        Cette méthode utilise GET /products/v1/catalogs qui télécharge un
+        catalogue complet et filtre localement.
+
+        Pour une recherche optimale, il faudrait:
+        1. Télécharger périodiquement les catalogues des marques
+        2. Les stocker localement
+        3. Faire la recherche en base de données locale
 
         Args:
-            query: Terme de recherche
-            brand_id: Filtrer par marque
+            query: Terme de recherche (référence, description, etc.)
+            brand_id: Filtrer par marque (optionnel)
             limit: Nombre maximum de résultats
 
         Returns:
-            Liste de produits
+            Liste de produits correspondants
         """
         params = {
-            'q': query,
-            'limit': limit
+            'responseType': 'json',
+            'page': 1  # Première page uniquement pour la recherche
         }
 
         if brand_id:
-            params['brand_id'] = brand_id
+            params['brandId'] = brand_id
+
+        # Si query ressemble à un ID produit, utiliser soneparProductId
+        if query.replace(',', '').isdigit():
+            params['soneparProductId'] = query
+        # Sinon, télécharger le catalogue et filtrer localement
+        # (peu optimal mais c'est la seule option)
 
         data = self._make_request(
             'GET',
-            '/products/search',
+            '/products/v1/catalogs',
             use_catalog_limiter=True,
             params=params
         )
 
         products = []
+        query_lower = query.lower()
+
         for item in data.get('products', []):
+            # Filtrer par query si recherche textuelle
+            description = item.get('description', '')
+            supplier_ref = item.get('supplierProductId', '')
+            sonepar_id = item.get('soneparProductId', item.get('id', ''))
+
+            # Si pas une recherche par ID, filtrer par texte
+            if not query.replace(',', '').isdigit():
+                if (query_lower not in description.lower() and
+                    query_lower not in str(supplier_ref).lower() and
+                    query_lower not in str(sonepar_id).lower()):
+                    continue
+
             # Parse brand
             brand_data = item.get('brand', {})
             brand = Brand(
-                id=brand_data.get('id', ''),
-                name=brand_data.get('name', ''),
-                logo_url=brand_data.get('logo_url')
+                id=brand_data.get('id', '') if brand_data else '',
+                name=brand_data.get('name', '') if brand_data else '',
+                logo_url=brand_data.get('logo_url') if brand_data else None
             )
 
-            # Parse product
+            # Parse status (API v1 utilise des codes numériques)
+            status_code = item.get('status', 20)
+            if isinstance(status_code, int):
+                status = ProductStatus.ACTIVE if status_code == 20 else ProductStatus.DISCONTINUED
+            else:
+                status = ProductStatus(status_code)
+
+            # Parse product (gérer les deux formats API)
             product = Product(
-                id=item['id'],
-                ean=item.get('ean', ''),
-                reference=item['reference'],
-                description=item['description'],
+                id=sonepar_id,
+                ean=item.get('gtin', item.get('ean', '')),
+                reference=supplier_ref or item.get('reference', ''),
+                description=description,
                 brand=brand,
                 family=item.get('family', ''),
                 subfamily=item.get('subfamily', ''),
-                status=ProductStatus(item.get('status', 'ACTIVE')),
+                status=status,
                 weight=item.get('weight'),
                 unit=item.get('unit', 'PCE'),
                 packaging=item.get('packaging', 1),
@@ -209,6 +245,10 @@ class SoneParClient:
             )
 
             products.append(product)
+
+            # Limiter les résultats
+            if len(products) >= limit:
+                break
 
         return products
 
