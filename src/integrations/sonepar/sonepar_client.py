@@ -138,13 +138,13 @@ class SoneParClient:
         Returns:
             Liste des marques
         """
-        data = self._make_request('GET', '/brands')
+        data = self._make_request('GET', '/products/v1/brands')
 
         brands = []
         for item in data.get('brands', []):
             brands.append(Brand(
-                id=item['id'],
-                name=item['name'],
+                id=item.get('brandId', item.get('id', '')),
+                name=item.get('brandName', item.get('name', '')),
                 logo_url=item.get('logo_url')
             ))
 
@@ -168,7 +168,7 @@ class SoneParClient:
 
         Args:
             query: Terme de recherche (référence, description, etc.)
-            brand_id: Filtrer par marque (optionnel)
+            brand_id: Filtrer par marque (utilise la première marque si None)
             limit: Nombre maximum de résultats
             use_local_db: Rechercher d'abord dans la base locale (défaut: True)
 
@@ -204,13 +204,19 @@ class SoneParClient:
         # NOTE: L'API Sonepar ne supporte PAS la recherche textuelle directe.
         # Cette méthode utilise GET /products/v1/catalogs qui télécharge un
         # catalogue complet et filtre localement.
+
+        # brandId est OBLIGATOIRE pour l'API
+        if not brand_id:
+            brands = self.get_brands()
+            if not brands:
+                return []
+            brand_id = brands[0].id
+
         params = {
+            'brandId': brand_id,  # OBLIGATOIRE
             'responseType': 'json',
             'page': 1  # Première page uniquement pour la recherche
         }
-
-        if brand_id:
-            params['brandId'] = brand_id
 
         # Si query ressemble à un ID produit, utiliser soneparProductId
         if query.replace(',', '').isdigit():
@@ -228,6 +234,10 @@ class SoneParClient:
         products = []
         query_lower = query.lower()
 
+        # Les infos de marque sont au niveau racine de la réponse
+        catalog_brand_id = data.get('brandId', brand_id)
+        catalog_brand_name = data.get('brandName', '')
+
         for item in data.get('products', []):
             # Filtrer par query si recherche textuelle
             description = item.get('description', '')
@@ -241,12 +251,11 @@ class SoneParClient:
                     query_lower not in str(sonepar_id).lower()):
                     continue
 
-            # Parse brand
-            brand_data = item.get('brand', {})
+            # Créer l'objet Brand à partir des infos du catalogue
             brand = Brand(
-                id=brand_data.get('id', '') if brand_data else '',
-                name=brand_data.get('name', '') if brand_data else '',
-                logo_url=brand_data.get('logo_url') if brand_data else None
+                id=catalog_brand_id,
+                name=catalog_brand_name,
+                logo_url=None
             )
 
             # Parse status (API v1 utilise des codes numériques)
@@ -294,7 +303,7 @@ class SoneParClient:
         et les stocke en base locale pour permettre des recherches rapides.
 
         Args:
-            brand_id: Filtrer par marque (optionnel, sinon tous les produits)
+            brand_id: ID de la marque à synchroniser (obligatoire, utilise la première marque si None)
             max_pages: Nombre maximum de pages à télécharger (défaut: 10)
             progress_callback: Fonction appelée avec (page, total_pages, products_count)
 
@@ -312,19 +321,28 @@ class SoneParClient:
         page = 1
 
         print(f"Début de la synchronisation du catalogue Sonepar...")
-        if brand_id:
+
+        # Si brandId non fourni, récupérer la première marque disponible
+        if not brand_id:
+            print("  Récupération de la liste des marques...")
+            brands = self.get_brands()
+            if not brands:
+                raise Exception("Aucune marque disponible dans l'API Sonepar")
+            brand_id = brands[0].id
+            print(f"  Marque sélectionnée: {brands[0].name} (ID: {brand_id})")
+        else:
             print(f"  Marque: {brand_id}")
+
         print(f"  Pages max: {max_pages}")
 
         while page <= max_pages:
             try:
+                # brandId est OBLIGATOIRE selon la documentation API
                 params = {
+                    'brandId': brand_id,
                     'responseType': 'json',
                     'page': page
                 }
-
-                if brand_id:
-                    params['brandId'] = brand_id
 
                 print(f"  Téléchargement page {page}/{max_pages}...")
 
@@ -340,10 +358,13 @@ class SoneParClient:
                     print(f"  Aucun produit trouvé sur la page {page}, arrêt.")
                     break
 
+                # Les infos de marque sont au niveau racine de la réponse
+                catalog_brand_id = data.get('brandId', brand_id)
+                catalog_brand_name = data.get('brandName', '')
+
                 # Convertir les produits en format dict pour la DB
                 products_to_save = []
                 for item in products_data:
-                    brand_data = item.get('brand', {})
                     status_code = item.get('status', 20)
 
                     if isinstance(status_code, int):
@@ -356,8 +377,8 @@ class SoneParClient:
                         'ean': item.get('gtin', item.get('ean', '')),
                         'reference': item.get('supplierProductId', item.get('reference', '')),
                         'description': item.get('description', ''),
-                        'brand': brand_data.get('name', '') if brand_data else '',
-                        'brand_id': brand_data.get('id', '') if brand_data else '',
+                        'brand': catalog_brand_name,
+                        'brand_id': catalog_brand_id,
                         'unit_price': 0.0,  # Prix nécessite un endpoint séparé
                         'stock_available': 0,  # Stock nécessite un endpoint séparé
                         'status': status,
@@ -376,9 +397,12 @@ class SoneParClient:
                 if progress_callback:
                     progress_callback(page, max_pages, total_products)
 
-                # Vérifier s'il y a d'autres pages
-                pagination = data.get('pagination', {})
-                total_pages = pagination.get('totalPages', page)
+                # Vérifier s'il y a d'autres pages (infos au niveau racine)
+                total_pages_str = data.get('totalPages', str(page))
+                try:
+                    total_pages = int(total_pages_str)
+                except (ValueError, TypeError):
+                    total_pages = page
 
                 if page >= total_pages:
                     print(f"  Dernière page atteinte ({total_pages} pages au total)")
