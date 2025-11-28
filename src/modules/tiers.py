@@ -1118,7 +1118,7 @@ class AddressesDialog(ResponsiveDialog):
                         border-radius: {DesignSystem.RADIUS_SM}px;
                     }}
                     QPushButton:hover {{
-                        background-color: {DesignSystem.ACCENT_RED};
+                        background-color: {DesignSystem.ERROR_RED};
                     }}
                 """)
                 actions_layout.addWidget(btn_delete)
