@@ -124,19 +124,19 @@ class TiersModule(QWidget):
 
         # Configuration des colonnes
         header = self.table.horizontalHeader()
-        header.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)  # Nom
+        header.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)  # Nom - s'étire
         header.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)  # Type
         header.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)  # B2B/B2C
         header.setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)  # Ville
         header.setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)  # SIRET
         header.setSectionResizeMode(5, QHeaderView.ResizeMode.ResizeToContents)  # Contacts
         header.setSectionResizeMode(6, QHeaderView.ResizeMode.Fixed)  # Actions - largeur fixe
-        header.resizeSection(6, 480)  # Largeur pour 4 boutons
+        header.resizeSection(6, 180)  # Largeur pour 4 icônes (4*36 + espaces)
 
         self.table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self.table.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
         self.table.verticalHeader().setVisible(False)
-        self.table.verticalHeader().setDefaultSectionSize(48)  # Hauteur des lignes
+        self.table.verticalHeader().setDefaultSectionSize(44)  # Hauteur des lignes ajustée
 
         card_layout.addWidget(self.table)
 
@@ -239,34 +239,90 @@ class TiersModule(QWidget):
             nb_contacts = len(company.employees)
             self.table.setItem(row, 5, QTableWidgetItem(str(nb_contacts)))
 
-            # Boutons d'actions
+            # Boutons d'actions (icônes compactes)
             actions_widget = QWidget()
             actions_layout = QHBoxLayout(actions_widget)
-            actions_layout.setContentsMargins(8, 4, 8, 4)
-            actions_layout.setSpacing(6)
+            actions_layout.setContentsMargins(4, 2, 4, 2)
+            actions_layout.setSpacing(4)
 
-            # Bouton Modifier
-            btn_edit = ModernButton("Modifier", "secondary")
-            btn_edit.setFixedHeight(32)
+            # Bouton Modifier (icône)
+            btn_edit = QPushButton("✏️")
+            btn_edit.setFixedSize(36, 36)
+            btn_edit.setToolTip("Modifier le tiers")
+            btn_edit.setCursor(Qt.CursorShape.PointingHandCursor)
             btn_edit.clicked.connect(lambda checked, c=company: self.modifier_tiers(c))
+            btn_edit.setStyleSheet(f"""
+                QPushButton {{
+                    background-color: {DesignSystem.SURFACE_ELEVATED};
+                    border: 1px solid {DesignSystem.BORDER_COLOR};
+                    border-radius: {DesignSystem.RADIUS_SM}px;
+                    font-size: 16px;
+                }}
+                QPushButton:hover {{
+                    background-color: {DesignSystem.ACCENT_BLUE};
+                    border-color: {DesignSystem.ACCENT_BLUE};
+                }}
+            """)
             actions_layout.addWidget(btn_edit)
 
-            # Bouton Contacts
-            btn_contacts = ModernButton("Contacts", "success")
-            btn_contacts.setFixedHeight(32)
+            # Bouton Contacts (icône)
+            btn_contacts = QPushButton("👥")
+            btn_contacts.setFixedSize(36, 36)
+            btn_contacts.setToolTip("Gérer les contacts")
+            btn_contacts.setCursor(Qt.CursorShape.PointingHandCursor)
             btn_contacts.clicked.connect(lambda checked, c=company: self.gerer_contacts(c))
+            btn_contacts.setStyleSheet(f"""
+                QPushButton {{
+                    background-color: {DesignSystem.SURFACE_ELEVATED};
+                    border: 1px solid {DesignSystem.BORDER_COLOR};
+                    border-radius: {DesignSystem.RADIUS_SM}px;
+                    font-size: 16px;
+                }}
+                QPushButton:hover {{
+                    background-color: {DesignSystem.SUCCESS_GREEN};
+                    border-color: {DesignSystem.SUCCESS_GREEN};
+                }}
+            """)
             actions_layout.addWidget(btn_contacts)
 
-            # Bouton Adresses
-            btn_addresses = ModernButton("Adresses", "warning")
-            btn_addresses.setFixedHeight(32)
+            # Bouton Adresses (icône)
+            btn_addresses = QPushButton("📍")
+            btn_addresses.setFixedSize(36, 36)
+            btn_addresses.setToolTip("Gérer les adresses de chantier")
+            btn_addresses.setCursor(Qt.CursorShape.PointingHandCursor)
             btn_addresses.clicked.connect(lambda checked, c=company: self.gerer_adresses(c))
+            btn_addresses.setStyleSheet(f"""
+                QPushButton {{
+                    background-color: {DesignSystem.SURFACE_ELEVATED};
+                    border: 1px solid {DesignSystem.BORDER_COLOR};
+                    border-radius: {DesignSystem.RADIUS_SM}px;
+                    font-size: 16px;
+                }}
+                QPushButton:hover {{
+                    background-color: {DesignSystem.WARNING_ORANGE};
+                    border-color: {DesignSystem.WARNING_ORANGE};
+                }}
+            """)
             actions_layout.addWidget(btn_addresses)
 
-            # Bouton Supprimer
-            btn_delete = ModernButton("Supprimer", "danger")
-            btn_delete.setFixedHeight(32)
+            # Bouton Supprimer (icône)
+            btn_delete = QPushButton("🗑️")
+            btn_delete.setFixedSize(36, 36)
+            btn_delete.setToolTip("Supprimer le tiers")
+            btn_delete.setCursor(Qt.CursorShape.PointingHandCursor)
             btn_delete.clicked.connect(lambda checked, c=company: self.supprimer_tiers(c))
+            btn_delete.setStyleSheet(f"""
+                QPushButton {{
+                    background-color: {DesignSystem.SURFACE_ELEVATED};
+                    border: 1px solid {DesignSystem.BORDER_COLOR};
+                    border-radius: {DesignSystem.RADIUS_SM}px;
+                    font-size: 16px;
+                }}
+                QPushButton:hover {{
+                    background-color: {DesignSystem.ERROR_RED};
+                    border-color: {DesignSystem.ERROR_RED};
+                }}
+            """)
             actions_layout.addWidget(btn_delete)
 
             self.table.setCellWidget(row, 6, actions_widget)
@@ -553,6 +609,26 @@ class TiersDialog(ResponsiveDialog):
 
         self.content_layout.addLayout(layout)
 
+        # Boutons Annuler/Valider
+        buttons_layout = QHBoxLayout()
+        buttons_layout.setSpacing(DesignSystem.SPACING_SM)
+        buttons_layout.addStretch()
+
+        btn_cancel = ModernButton("Annuler", "secondary")
+        btn_cancel.clicked.connect(self.reject)
+        buttons_layout.addWidget(btn_cancel)
+
+        btn_save = ModernButton("Enregistrer", "primary")
+        btn_save.clicked.connect(self.save)
+        buttons_layout.addWidget(btn_save)
+
+        self.content_layout.addLayout(buttons_layout)
+
+    def save(self):
+        """Enregistre le tiers"""
+        if self.validate():
+            self.accept()
+
     def _get_checkbox_style(self) -> str:
         """Retourne le style pour les checkboxes"""
         return f"""
@@ -688,16 +764,16 @@ class ContactsDialog(ResponsiveDialog):
         """)
 
         header = self.table.horizontalHeader()
-        header.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
-        header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
-        header.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
-        header.setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
-        header.setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)
-        header.setSectionResizeMode(5, QHeaderView.ResizeMode.Fixed)
-        header.resizeSection(5, 240)  # Largeur pour 2 boutons
+        header.setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)  # Nom
+        header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)  # Email
+        header.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)  # Téléphone
+        header.setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)  # Mobile
+        header.setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)  # Fonction
+        header.setSectionResizeMode(5, QHeaderView.ResizeMode.Fixed)  # Actions
+        header.resizeSection(5, 80)  # Largeur pour 2 icônes (2*32 + espaces)
 
         self.table.verticalHeader().setVisible(False)
-        self.table.verticalHeader().setDefaultSectionSize(40)  # Hauteur des lignes
+        self.table.verticalHeader().setDefaultSectionSize(38)  # Hauteur des lignes ajustée
 
         layout.addWidget(self.table)
 
@@ -734,20 +810,48 @@ class ContactsDialog(ResponsiveDialog):
                 job_text += " 📧"
             self.table.setItem(row, 4, QTableWidgetItem(job_text))
 
-            # Actions
+            # Actions (icônes compactes)
             actions_widget = QWidget()
             actions_layout = QHBoxLayout(actions_widget)
-            actions_layout.setContentsMargins(6, 4, 6, 4)
-            actions_layout.setSpacing(6)
+            actions_layout.setContentsMargins(4, 2, 4, 2)
+            actions_layout.setSpacing(4)
 
-            btn_edit = ModernButton("Modifier", "secondary")
-            btn_edit.setFixedHeight(28)
+            btn_edit = QPushButton("✏️")
+            btn_edit.setFixedSize(32, 32)
+            btn_edit.setToolTip("Modifier le contact")
+            btn_edit.setCursor(Qt.CursorShape.PointingHandCursor)
             btn_edit.clicked.connect(lambda checked, e=employee: self.modifier_contact(e))
+            btn_edit.setStyleSheet(f"""
+                QPushButton {{
+                    background-color: {DesignSystem.SURFACE_ELEVATED};
+                    border: 1px solid {DesignSystem.BORDER_COLOR};
+                    border-radius: {DesignSystem.RADIUS_SM}px;
+                    font-size: 14px;
+                }}
+                QPushButton:hover {{
+                    background-color: {DesignSystem.ACCENT_BLUE};
+                    border-color: {DesignSystem.ACCENT_BLUE};
+                }}
+            """)
             actions_layout.addWidget(btn_edit)
 
-            btn_delete = ModernButton("Supprimer", "danger")
-            btn_delete.setFixedHeight(28)
+            btn_delete = QPushButton("🗑️")
+            btn_delete.setFixedSize(32, 32)
+            btn_delete.setToolTip("Supprimer le contact")
+            btn_delete.setCursor(Qt.CursorShape.PointingHandCursor)
             btn_delete.clicked.connect(lambda checked, e=employee: self.supprimer_contact(e))
+            btn_delete.setStyleSheet(f"""
+                QPushButton {{
+                    background-color: {DesignSystem.SURFACE_ELEVATED};
+                    border: 1px solid {DesignSystem.BORDER_COLOR};
+                    border-radius: {DesignSystem.RADIUS_SM}px;
+                    font-size: 14px;
+                }}
+                QPushButton:hover {{
+                    background-color: {DesignSystem.ERROR_RED};
+                    border-color: {DesignSystem.ERROR_RED};
+                }}
+            """)
             actions_layout.addWidget(btn_delete)
 
             self.table.setCellWidget(row, 5, actions_widget)
@@ -931,6 +1035,26 @@ class EmployeeDialog(ResponsiveDialog):
         layout.addLayout(grid)
         self.content_layout.addLayout(layout)
 
+        # Boutons Annuler/Valider
+        buttons_layout = QHBoxLayout()
+        buttons_layout.setSpacing(DesignSystem.SPACING_SM)
+        buttons_layout.addStretch()
+
+        btn_cancel = ModernButton("Annuler", "secondary")
+        btn_cancel.clicked.connect(self.reject)
+        buttons_layout.addWidget(btn_cancel)
+
+        btn_save = ModernButton("Enregistrer", "primary")
+        btn_save.clicked.connect(self.save)
+        buttons_layout.addWidget(btn_save)
+
+        self.content_layout.addLayout(buttons_layout)
+
+    def save(self):
+        """Enregistre le contact"""
+        if self.validate():
+            self.accept()
+
     def load_employee_data(self):
         """Charge les données du contact"""
         self.input_firstname.setText(self.employee.firstname or "")
@@ -1020,16 +1144,16 @@ class AddressesDialog(ResponsiveDialog):
         """)
 
         header = self.table.horizontalHeader()
-        header.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
-        header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
-        header.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
-        header.setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
-        header.setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)
-        header.setSectionResizeMode(5, QHeaderView.ResizeMode.Fixed)
-        header.resizeSection(5, 240)  # Largeur pour 2 boutons
+        header.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)  # Nom
+        header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)  # Adresse
+        header.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)  # Code Postal
+        header.setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)  # Ville
+        header.setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)  # Contact
+        header.setSectionResizeMode(5, QHeaderView.ResizeMode.Fixed)  # Actions
+        header.resizeSection(5, 80)  # Largeur pour 2 icônes (2*32 + espaces)
 
         self.table.verticalHeader().setVisible(False)
-        self.table.verticalHeader().setDefaultSectionSize(40)  # Hauteur des lignes
+        self.table.verticalHeader().setDefaultSectionSize(38)  # Hauteur des lignes ajustée
 
         layout.addWidget(self.table)
 
@@ -1071,20 +1195,48 @@ class AddressesDialog(ResponsiveDialog):
                 # Contact
                 self.table.setItem(row, 4, QTableWidgetItem(address.contact_name or "-"))
 
-                # Actions
+                # Actions (icônes compactes)
                 actions_widget = QWidget()
                 actions_layout = QHBoxLayout(actions_widget)
-                actions_layout.setContentsMargins(6, 4, 6, 4)
-                actions_layout.setSpacing(6)
+                actions_layout.setContentsMargins(4, 2, 4, 2)
+                actions_layout.setSpacing(4)
 
-                btn_edit = ModernButton("Modifier", "secondary")
-                btn_edit.setFixedHeight(28)
+                btn_edit = QPushButton("✏️")
+                btn_edit.setFixedSize(32, 32)
+                btn_edit.setToolTip("Modifier l'adresse")
+                btn_edit.setCursor(Qt.CursorShape.PointingHandCursor)
                 btn_edit.clicked.connect(lambda checked, a=address: self.modifier_adresse(a))
+                btn_edit.setStyleSheet(f"""
+                    QPushButton {{
+                        background-color: {DesignSystem.SURFACE_ELEVATED};
+                        border: 1px solid {DesignSystem.BORDER_COLOR};
+                        border-radius: {DesignSystem.RADIUS_SM}px;
+                        font-size: 14px;
+                    }}
+                    QPushButton:hover {{
+                        background-color: {DesignSystem.ACCENT_BLUE};
+                        border-color: {DesignSystem.ACCENT_BLUE};
+                    }}
+                """)
                 actions_layout.addWidget(btn_edit)
 
-                btn_delete = ModernButton("Supprimer", "danger")
-                btn_delete.setFixedHeight(28)
+                btn_delete = QPushButton("🗑️")
+                btn_delete.setFixedSize(32, 32)
+                btn_delete.setToolTip("Supprimer l'adresse")
+                btn_delete.setCursor(Qt.CursorShape.PointingHandCursor)
                 btn_delete.clicked.connect(lambda checked, a=address: self.supprimer_adresse(a))
+                btn_delete.setStyleSheet(f"""
+                    QPushButton {{
+                        background-color: {DesignSystem.SURFACE_ELEVATED};
+                        border: 1px solid {DesignSystem.BORDER_COLOR};
+                        border-radius: {DesignSystem.RADIUS_SM}px;
+                        font-size: 14px;
+                    }}
+                    QPushButton:hover {{
+                        background-color: {DesignSystem.ERROR_RED};
+                        border-color: {DesignSystem.ERROR_RED};
+                    }}
+                """)
                 actions_layout.addWidget(btn_delete)
 
                 self.table.setCellWidget(row, 5, actions_widget)
@@ -1258,6 +1410,26 @@ class AddressDialog(ResponsiveDialog):
 
         layout.addLayout(grid)
         self.content_layout.addLayout(layout)
+
+        # Boutons Annuler/Valider
+        buttons_layout = QHBoxLayout()
+        buttons_layout.setSpacing(DesignSystem.SPACING_SM)
+        buttons_layout.addStretch()
+
+        btn_cancel = ModernButton("Annuler", "secondary")
+        btn_cancel.clicked.connect(self.reject)
+        buttons_layout.addWidget(btn_cancel)
+
+        btn_save = ModernButton("Enregistrer", "primary")
+        btn_save.clicked.connect(self.save)
+        buttons_layout.addWidget(btn_save)
+
+        self.content_layout.addLayout(buttons_layout)
+
+    def save(self):
+        """Enregistre l'adresse"""
+        if self.validate():
+            self.accept()
 
     def load_address_data(self):
         """Charge les données de l'adresse"""
