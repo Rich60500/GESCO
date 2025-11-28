@@ -122,7 +122,15 @@ class SoneParClient:
             try:
                 response = self.session.request(method, url, **kwargs)
                 response.raise_for_status()
-                return response.json()
+
+                # Vérifier que la réponse contient du JSON
+                if not response.text or response.text.strip() == '':
+                    raise ValueError("Réponse vide de l'API")
+
+                try:
+                    return response.json()
+                except ValueError as json_error:
+                    raise ValueError(f"Réponse invalide de l'API (pas du JSON): {response.text[:100]}")
 
             except requests.exceptions.RequestException as e:
                 if attempt == self.config.max_retries - 1:
@@ -194,7 +202,7 @@ class SoneParClient:
                         reference=row.get('reference', ''),
                         description=row.get('description', ''),
                         brand=brand,
-                        status=ProductStatus(row.get('status', 'UNKNOWN'))
+                        status=ProductStatus.from_api_value(row.get('status'))
                     )
                     products.append(product)
 
@@ -259,11 +267,7 @@ class SoneParClient:
             )
 
             # Parse status (API v1 utilise des codes numériques)
-            status_code = item.get('status', 20)
-            if isinstance(status_code, int):
-                status = ProductStatus.ACTIVE if status_code == 20 else ProductStatus.DISCONTINUED
-            else:
-                status = ProductStatus(status_code)
+            status = ProductStatus.from_api_value(item.get('status', 20))
 
             # Parse product (gérer les deux formats API)
             product = Product(
@@ -484,7 +488,7 @@ class SoneParClient:
                 brand=brand,
                 family=data.get('family', ''),
                 subfamily=data.get('subfamily', ''),
-                status=ProductStatus(data.get('status', 'ACTIVE')),
+                status=ProductStatus.from_api_value(data.get('status')),
                 weight=data.get('weight'),
                 unit=data.get('unit', 'PCE'),
                 packaging=data.get('packaging', 1),

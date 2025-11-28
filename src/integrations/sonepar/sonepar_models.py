@@ -15,6 +15,46 @@ class ProductStatus(Enum):
     INACTIVE = "INACTIVE"
     DISCONTINUED = "DISCONTINUED"
 
+    @staticmethod
+    def from_api_value(value):
+        """
+        Convertit une valeur de l'API (code numérique ou string) en ProductStatus
+
+        Args:
+            value: Code numérique (20, 30, etc.) ou string ("ACTIVE", etc.)
+
+        Returns:
+            ProductStatus correspondant (défaut: ACTIVE)
+        """
+        if value is None:
+            return ProductStatus.ACTIVE
+
+        # Si c'est déjà un ProductStatus, le retourner
+        if isinstance(value, ProductStatus):
+            return value
+
+        # Conversion des codes numériques Sonepar
+        if isinstance(value, int) or (isinstance(value, str) and value.isdigit()):
+            code = int(value)
+            if code == 20:
+                return ProductStatus.ACTIVE
+            elif code == 30:
+                return ProductStatus.DISCONTINUED
+            else:
+                return ProductStatus.INACTIVE
+
+        # Conversion des strings
+        value_str = str(value).upper()
+        if value_str in ("ACTIVE", "20"):
+            return ProductStatus.ACTIVE
+        elif value_str in ("DISCONTINUED", "30"):
+            return ProductStatus.DISCONTINUED
+        elif value_str in ("INACTIVE", "10"):
+            return ProductStatus.INACTIVE
+
+        # Par défaut, retourner ACTIVE
+        return ProductStatus.ACTIVE
+
 
 class OrderType(Enum):
     """Type de commande"""
