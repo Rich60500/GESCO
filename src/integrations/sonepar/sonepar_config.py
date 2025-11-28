@@ -12,7 +12,7 @@ class SoneParConfig:
     """Configuration pour l'API Sonepar"""
 
     # Identifiants API (DENIS EURL)
-    api_key: str = "95791076"  # Ocp-Apim-Subscription-Key
+    api_key: str = "e2fc8f3844244c1cb15883d63a6ae764"  # Ocp-Apim-Subscription-Key
     customer_code: str = "4146EB1"
     org_id: str = "5QD"
 

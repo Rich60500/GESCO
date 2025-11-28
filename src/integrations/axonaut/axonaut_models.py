@@ -409,3 +409,131 @@ class Company:
     def b2c_label(self) -> str:
         """Retourne le type B2B/B2C"""
         return "B2C" if self.isB2C else "B2B"
+
+
+@dataclass
+class Invoice:
+    """Facture Axonaut"""
+    id: Optional[int] = None
+    invoice_number: Optional[str] = None  # Numéro de facture
+    company_id: Optional[int] = None  # ID de l'entreprise cliente
+    company_name: Optional[str] = None  # Nom du client
+    invoice_date: Optional[str] = None  # Date d'émission
+    due_date: Optional[str] = None  # Date d'échéance
+    total_amount_tax_included: float = 0.0  # Montant TTC
+    total_amount_tax_excluded: float = 0.0  # Montant HT
+    tax_amount: float = 0.0  # Montant de la TVA
+    paid_amount: float = 0.0  # Montant payé
+    status: Optional[str] = None  # Statut (draft, sent, paid, etc.)
+    payment_status: Optional[str] = None  # Statut de paiement
+    notes: Optional[str] = None  # Notes/commentaires
+    custom_fields: Dict[str, Any] = field(default_factory=dict)
+
+    @classmethod
+    def from_dict(cls, data: dict) -> 'Invoice':
+        """Crée une instance depuis un dictionnaire"""
+        if not data or not isinstance(data, dict):
+            return cls()
+
+        # Gérer le client (peut être un objet ou juste un ID)
+        company_id = None
+        company_name = None
+        if 'company' in data:
+            if isinstance(data['company'], dict):
+                company_id = data['company'].get('id')
+                company_name = data['company'].get('name')
+            else:
+                company_id = data['company']
+        elif 'company_id' in data:
+            company_id = data['company_id']
+
+        return cls(
+            id=data.get('id'),
+            invoice_number=data.get('invoice_number') or data.get('number'),
+            company_id=company_id,
+            company_name=company_name or data.get('company_name'),
+            invoice_date=data.get('invoice_date') or data.get('date'),
+            due_date=data.get('due_date'),
+            total_amount_tax_included=float(data.get('total_amount_tax_included', 0) or 0),
+            total_amount_tax_excluded=float(data.get('total_amount_tax_excluded', 0) or 0),
+            tax_amount=float(data.get('tax_amount', 0) or 0),
+            paid_amount=float(data.get('paid_amount', 0) or 0),
+            status=data.get('status'),
+            payment_status=data.get('payment_status'),
+            notes=data.get('notes') or data.get('comments'),
+            custom_fields=data.get('custom_fields', {})
+        )
+
+    def to_dict(self, for_api: bool = False) -> dict:
+        """Convertit en dictionnaire"""
+        result = {
+            'invoice_number': self.invoice_number,
+            'company_id': self.company_id,
+            'invoice_date': self.invoice_date,
+            'due_date': self.due_date,
+            'total_amount_tax_included': self.total_amount_tax_included,
+            'total_amount_tax_excluded': self.total_amount_tax_excluded,
+            'tax_amount': self.tax_amount,
+            'paid_amount': self.paid_amount,
+            'status': self.status,
+            'payment_status': self.payment_status,
+            'notes': self.notes
+        }
+
+        if self.custom_fields:
+            result['custom_fields'] = self.custom_fields
+
+        if not for_api:
+            result['id'] = self.id
+            result['company_name'] = self.company_name
+
+        return result
+
+    @property
+    def balance(self) -> float:
+        """Retourne le solde restant à payer"""
+        return self.total_amount_tax_included - self.paid_amount
+
+    @property
+    def is_paid(self) -> bool:
+        """Retourne True si la facture est soldée"""
+        return self.balance <= 0.01  # Tolérance de 1 centime
+
+    @property
+    def is_overdue(self) -> bool:
+        """Retourne True si la facture est en dépassement"""
+        if not self.due_date or self.is_paid:
+            return False
+
+        try:
+            from datetime import datetime
+            due = datetime.fromisoformat(self.due_date.replace('Z', '+00:00'))
+            return due < datetime.now() and not self.is_paid
+        except:
+            return False
+
+    @property
+    def status_label(self) -> str:
+        """Retourne le libellé du statut"""
+        if self.is_paid:
+            return "Soldée"
+        elif self.is_overdue:
+            return "En retard"
+        elif self.status == 'draft':
+            return "Brouillon"
+        elif self.status == 'sent':
+            return "Envoyée"
+        else:
+            return self.status or "Inconnu"
+
+    @property
+    def status_color(self) -> str:
+        """Retourne la couleur du statut pour l'UI"""
+        if self.is_paid:
+            return "#34C759"  # Vert (SUCCESS_GREEN)
+        elif self.is_overdue:
+            return "#FF3B30"  # Rouge (ERROR_RED)
+        elif self.status == 'sent':
+            return "#FF9500"  # Orange (WARNING_ORANGE)
+        else:
+            return "#8E8E93"  # Gris

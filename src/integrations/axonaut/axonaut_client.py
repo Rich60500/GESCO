@@ -7,7 +7,7 @@ import requests
 from typing import List, Optional, Dict, Any
 
 from .axonaut_config import AxonautConfig
-from .axonaut_models import Company, Employee, Address
+from .axonaut_models import Company, Employee, Address, Invoice
 
 
 class AxonautAPIError(Exception):
@@ -340,3 +340,46 @@ class AxonautClient:
             Entreprise synchronisée ou None
         """
         return self.get_company(company_id)
+
+    # ==================== INVOICES ====================
+
+    def get_invoices(self, since_date: Optional[str] = None, company_id: Optional[int] = None) -> List[Invoice]:
+        """
+        Récupère les factures depuis l'API Axonaut
+
+        Args:
+            since_date: Date minimale au format ISO (ex: "2025-07-01")
+            company_id: ID de l'entreprise pour filtrer (optionnel)
+
+        Returns:
+            Liste des factures
+        """
+        params = {}
+        if since_date:
+            params['invoice_date_min'] = since_date
+        if company_id:
+            params['company_id'] = company_id
+
+        response = self._request('GET', '/invoices', params=params)
+        data = response.json()
+
+        if isinstance(data, list):
+            return [Invoice.from_dict(item) for item in data]
+        return []
+
+    def get_invoice(self, invoice_id: int) -> Optional[Invoice]:
+        """
+        Récupère une facture par son ID
+
+        Args:
+            invoice_id: ID de la facture
+
+        Returns:
+            Facture ou None si non trouvée
+        """
+        try:
+            response = self._request('GET', f'/invoices/{invoice_id}')
+            data = response.json()
+            return Invoice.from_dict(data)
+        except AxonautAPIError:
+            return None

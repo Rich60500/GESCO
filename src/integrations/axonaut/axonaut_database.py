@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import List, Optional, Dict, Any
 from datetime import datetime
 
-from .axonaut_models import Company, Employee, Address
+from .axonaut_models import Company, Employee, Address, Invoice
 
 
 class AxonautDatabase:
@@ -122,6 +122,32 @@ class AxonautDatabase:
             )
         """)
 
+        # Table des factures
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS invoices (
+                id INTEGER PRIMARY KEY,
+                axonaut_id INTEGER UNIQUE,
+                invoice_number TEXT,
+                company_id INTEGER,
+                axonaut_company_id INTEGER,
+                company_name TEXT,
+                invoice_date TEXT,
+                due_date TEXT,
+                total_amount_tax_included REAL DEFAULT 0.0,
+                total_amount_tax_excluded REAL DEFAULT 0.0,
+                tax_amount REAL DEFAULT 0.0,
+                paid_amount REAL DEFAULT 0.0,
+                status TEXT,
+                payment_status TEXT,
+                notes TEXT,
+                custom_fields TEXT,
+                last_sync TEXT,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (company_id) REFERENCES companies(id) ON DELETE SET NULL
+            )
+        """)
+
         # Index pour les recherches
         cursor.execute("""
             CREATE INDEX IF NOT EXISTS idx_companies_name ON companies(name)
@@ -134,6 +160,18 @@ class AxonautDatabase:
         """)
         cursor.execute("""
             CREATE INDEX IF NOT EXISTS idx_addresses_company ON addresses(company_id)
+        """)
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_invoices_company ON invoices(company_id)
+        """)
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_invoices_date ON invoices(invoice_date)
+        """)
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_invoices_due_date ON invoices(due_date)
+        """)
+        cursor.execute("""
+            CREATE INDEX IF NOT EXISTS idx_invoices_status ON invoices(payment_status)
         """)
 
         conn.commit()
@@ -649,5 +687,188 @@ class AxonautDatabase:
         conn = self.get_connection()
         cursor = conn.cursor()
         cursor.execute("DELETE FROM addresses WHERE id = ?", (address_id,))
+        conn.commit()
+        conn.close()
+
+    # ==================== INVOICES ====================
+
+    def save_invoice(self, invoice: Invoice, company_local_id: Optional[int] = None) -> int:
+        """
+        Sauvegarde ou met à jour une facture
+
+        Args:
+            invoice: Objet Invoice
+            company_local_id: ID local de l'entreprise (optionnel)
+
+        Returns:
+            ID local de la facture
+        """
+        conn = self.get_connection()
+        cursor = conn.cursor()
+
+        custom_fields = json.dumps(invoice.custom_fields) if invoice.custom_fields else None
+
+        if invoice.id:
+            cursor.execute("SELECT id FROM invoices WHERE axonaut_id = ?", (invoice.id,))
+            existing = cursor.fetchone()
+
+            if existing:
+                # Mise à jour
+                cursor.execute("""
+                    UPDATE invoices SET
+                        invoice_number = ?, company_name = ?, invoice_date = ?,
+                        due_date = ?, total_amount_tax_included = ?,
+                        total_amount_tax_excluded = ?, tax_amount = ?,
+                        paid_amount = ?, status = ?, payment_status = ?,
+                        notes = ?, custom_fields = ?,
+                        last_sync = ?, updated_at = CURRENT_TIMESTAMP
+                    WHERE axonaut_id = ?
+                """, (
+                    invoice.invoice_number, invoice.company_name, invoice.invoice_date,
+                    invoice.due_date, invoice.total_amount_tax_included,
+                    invoice.total_amount_tax_excluded, invoice.tax_amount,
+                    invoice.paid_amount, invoice.status, invoice.payment_status,
+                    invoice.notes, custom_fields,
+                    datetime.now().isoformat(), invoice.id
+                ))
+                local_id = existing['id']
+            else:
+                # Insertion avec ID Axonaut
+                cursor.execute("""
+                    INSERT INTO invoices (
+                        axonaut_id, invoice_number, company_id, axonaut_company_id,
+                        company_name, invoice_date, due_date, total_amount_tax_included,
+                        total_amount_tax_excluded, tax_amount, paid_amount,
+                        status, payment_status, notes, custom_fields, last_sync
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (
+                    invoice.id, invoice.invoice_number, company_local_id, invoice.company_id,
+                    invoice.company_name, invoice.invoice_date, invoice.due_date,
+                    invoice.total_amount_tax_included, invoice.total_amount_tax_excluded,
+                    invoice.tax_amount, invoice.paid_amount, invoice.status,
+                    invoice.payment_status, invoice.notes, custom_fields,
+                    datetime.now().isoformat()
+                ))
+                local_id = cursor.lastrowid
+        else:
+            # Nouvelle facture sans ID Axonaut
+            cursor.execute("""
+                INSERT INTO invoices (
+                    invoice_number, company_id, company_name, invoice_date,
+                    due_date, total_amount_tax_included, total_amount_tax_excluded,
+                    tax_amount, paid_amount, status, payment_status,
+                    notes, custom_fields
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """, (
+                invoice.invoice_number, company_local_id, invoice.company_name,
+                invoice.invoice_date, invoice.due_date, invoice.total_amount_tax_included,
+                invoice.total_amount_tax_excluded, invoice.tax_amount, invoice.paid_amount,
+                invoice.status, invoice.payment_status, invoice.notes, custom_fields
+            ))
+            local_id = cursor.lastrowid
+
+        conn.commit()
+        conn.close()
+        return local_id
+
+    def get_invoices(self,
+                    since_date: Optional[str] = None,
+                    company_id: Optional[int] = None,
+                    unpaid_only: bool = False,
+                    overdue_only: bool = False) -> List[Invoice]:
+        """
+        Récupère les factures avec filtres
+
+        Args:
+            since_date: Date minimale (ISO format)
+            company_id: ID local de l'entreprise
+            unpaid_only: Seulement les factures non soldées
+            overdue_only: Seulement les factures en dépassement
+
+        Returns:
+            Liste des factures
+        """
+        conn = self.get_connection()
+        cursor = conn.cursor()
+
+        query = "SELECT * FROM invoices WHERE 1=1"
+        params = []
+
+        if since_date:
+            query += " AND invoice_date >= ?"
+            params.append(since_date)
+
+        if company_id:
+            query += " AND company_id = ?"
+            params.append(company_id)
+
+        query += " ORDER BY invoice_date DESC, invoice_number DESC"
+
+        cursor.execute(query, params)
+        rows = cursor.fetchall()
+
+        invoices = [self._row_to_invoice(row) for row in rows]
+
+        # Filtres post-requête (propriétés calculées)
+        if unpaid_only:
+            invoices = [inv for inv in invoices if not inv.is_paid]
+
+        if overdue_only:
+            invoices = [inv for inv in invoices if inv.is_overdue]
+
+        conn.close()
+        return invoices
+
+    def get_invoice(self, invoice_id: int) -> Optional[Invoice]:
+        """
+        Récupère une facture par son ID local
+
+        Args:
+            invoice_id: ID local de la facture
+
+        Returns:
+            Facture ou None
+        """
+        conn = self.get_connection()
+        cursor = conn.cursor()
+
+        cursor.execute("SELECT * FROM invoices WHERE id = ?", (invoice_id,))
+        row = cursor.fetchone()
+
+        conn.close()
+
+        if not row:
+            return None
+
+        return self._row_to_invoice(row)
+
+    def _row_to_invoice(self, row: sqlite3.Row) -> Invoice:
+        """Convertit une ligne SQL en objet Invoice"""
+        custom_fields = {}
+        if row['custom_fields']:
+            custom_fields = json.loads(row['custom_fields'])
+
+        return Invoice(
+            id=row['axonaut_id'],
+            invoice_number=row['invoice_number'],
+            company_id=row['axonaut_company_id'] or row['company_id'],
+            company_name=row['company_name'],
+            invoice_date=row['invoice_date'],
+            due_date=row['due_date'],
+            total_amount_tax_included=row['total_amount_tax_included'],
+            total_amount_tax_excluded=row['total_amount_tax_excluded'],
+            tax_amount=row['tax_amount'],
+            paid_amount=row['paid_amount'],
+            status=row['status'],
+            payment_status=row['payment_status'],
+            notes=row['notes'],
+            custom_fields=custom_fields
+        )
+
+    def delete_invoice(self, invoice_id: int):
+        """Supprime une facture"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM invoices WHERE id = ?", (invoice_id,))
         conn.commit()
         conn.close()
