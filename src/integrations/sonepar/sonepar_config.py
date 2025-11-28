@@ -15,6 +15,8 @@ class SoneParConfig:
     api_key: str = "e2fc8f3844244c1cb15883d63a6ae764"  # Ocp-Apim-Subscription-Key
     customer_code: str = "4146EB1"
     org_id: str = "5QD"
+    facility_id: str = ""  # ID de l'agence (optionnel)
+    distribution_center_id: str = ""  # ID du centre de distribution (optionnel)
 
     # Authentification utilisateur (à configurer)
     # Ces identifiants doivent être encodés en Base64

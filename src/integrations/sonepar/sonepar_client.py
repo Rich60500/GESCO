@@ -505,60 +505,102 @@ class SoneParClient:
 
     def get_prices_and_stocks(
         self,
-        product_references: List[str]
+        product_ids: List[str]
     ) -> List[ProductWithPricing]:
         """
         Récupère les prix et stocks pour une liste de produits
 
+        IMPORTANT : Cette méthode nécessite l'authentification user/pass configurée
+        dans SoneParConfig (X-snp-user et X-snp-pass)
+
         Args:
-            product_references: Liste de références produits
+            product_ids: Liste de soneparProductId (IDs Sonepar, pas références fournisseur)
 
         Returns:
             Liste de produits avec prix et stock
+
+        Raises:
+            ValueError: Si l'authentification user/pass n'est pas configurée
         """
+        # Vérifier que l'authentification est configurée
+        if not self.config.user_id or not self.config.user_password:
+            raise ValueError(
+                "L'authentification utilisateur Sonepar n'est pas configurée.\n\n"
+                "Pour obtenir les prix et stocks, vous devez configurer :\n"
+                "- user_id (identifiant utilisateur Sonepar)\n"
+                "- user_password (mot de passe Sonepar)\n\n"
+                "Ces identifiants sont fournis par votre agence Sonepar."
+            )
+
+        # Préparer la requête selon la doc API v2
+        payload = {
+            "customerCode": self.config.customer_code,
+            "orgId": self.config.org_id,
+            "products": [{"soneparProductId": pid} for pid in product_ids]
+        }
+
+        # Ajouter les champs optionnels si configurés
+        if self.config.facility_id:
+            payload["facilityId"] = self.config.facility_id
+        if self.config.distribution_center_id:
+            payload["distributionCenterId"] = self.config.distribution_center_id
+
+        # Limiter à 100 produits max selon la doc
+        if len(product_ids) > 100:
+            raise ValueError("Maximum 100 produits par requête (limitation API Sonepar)")
+
         data = self._make_request(
             'POST',
-            '/pricing/bulk',
-            json={'references': product_references}
+            '/products/v2/products',
+            json=payload
         )
 
         results = []
         for item in data.get('products', []):
-            # Parse product (simplifié)
-            brand = Brand(
-                id=item['brand']['id'],
-                name=item['brand']['name']
-            )
+            sonepar_id = item.get('soneparProductId', '')
 
+            # Créer un objet Product simplifié
+            # Note: Cette API ne retourne pas toutes les infos produit,
+            # juste l'ID, les prix et stocks
             product = Product(
-                id=item['id'],
-                ean=item.get('ean', ''),
-                reference=item['reference'],
-                description=item['description'],
-                brand=brand
+                id=sonepar_id,
+                ean='',
+                reference='',
+                description='',
+                brand=Brand(id='', name='')
             )
 
-            # Parse price
-            price_data = item.get('price')
+            # Parser les prix (multiples prix possibles selon contrats)
+            prices_data = item.get('prices', [])
             price = None
-            if price_data:
+            if prices_data:
+                # Prendre le premier prix (généralement le plus avantageux)
+                first_price = prices_data[0]
                 price = Price(
-                    net_price=price_data['net_price'],
-                    gross_price=price_data['gross_price'],
-                    currency=price_data.get('currency', 'EUR'),
-                    unit=price_data.get('unit', 'PCE'),
-                    discount_rate=price_data.get('discount_rate', 0.0)
+                    net_price=float(first_price.get('netPriceAmount', 0)),
+                    gross_price=float(first_price.get('basePriceAmount', 0)),
+                    currency='EUR',
+                    unit=first_price.get('unit', 'EA'),
+                    discount_rate=0.0  # Calculé si nécessaire
                 )
 
-            # Parse stock
-            stock_data = item.get('stock')
+            # Parser les stocks (multiples stocks possibles : agence, centre distrib, etc.)
+            stocks_data = item.get('stocks', [])
             stock = None
-            if stock_data:
-                stock = Stock(
-                    quantity=stock_data['quantity'],
-                    stock_type=StockType(stock_data.get('type', 'AVAILABLE')),
-                    location=stock_data.get('location', '')
-                )
+            if stocks_data:
+                # Prendre le premier stock disponible (agence en priorité)
+                # Type "1" = Stock agence, Type "2" = Stock centre distribution
+                for stock_item in stocks_data:
+                    if int(stock_item.get('quantity', 0)) > 0:
+                        stock_type_code = stock_item.get('type', '1')
+                        location = "Agence" if stock_type_code == '1' else "Centre de distribution"
+
+                        stock = Stock(
+                            quantity=int(stock_item.get('quantity', 0)),
+                            stock_type=StockType.AVAILABLE,  # Simplifié
+                            location=location
+                        )
+                        break  # Prendre le premier stock disponible
 
             results.append(ProductWithPricing(
                 product=product,

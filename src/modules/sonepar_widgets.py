@@ -81,9 +81,9 @@ class RechercheSoneParWidget(QWidget):
 
         # Tableau des résultats
         self.table = QTableWidget()
-        self.table.setColumnCount(6)
+        self.table.setColumnCount(8)
         self.table.setHorizontalHeaderLabels([
-            "Référence", "Description", "Marque", "EAN", "Cond.", "Unité"
+            "Référence", "Description", "Marque", "EAN", "Cond.", "Unité", "Prix", "Stock"
         ])
 
         self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
@@ -94,12 +94,14 @@ class RechercheSoneParWidget(QWidget):
 
         # Ajuster les colonnes
         header = self.table.horizontalHeader()
-        header.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
-        header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
-        header.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
-        header.setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
-        header.setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)
-        header.setSectionResizeMode(5, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)  # Référence
+        header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)  # Description
+        header.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)  # Marque
+        header.setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)  # EAN
+        header.setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)  # Cond.
+        header.setSectionResizeMode(5, QHeaderView.ResizeMode.ResizeToContents)  # Unité
+        header.setSectionResizeMode(6, QHeaderView.ResizeMode.ResizeToContents)  # Prix
+        header.setSectionResizeMode(7, QHeaderView.ResizeMode.ResizeToContents)  # Stock
 
         self.table.setStyleSheet(f"""
             QTableWidget {{
@@ -129,20 +131,26 @@ class RechercheSoneParWidget(QWidget):
 
         layout.addWidget(self.table)
 
-        # Boutons
-        actions_layout = QHBoxLayout()
-        actions_layout.setSpacing(DesignSystem.SPACING_SM)
-
-        btn_voir_prix = ModernButton("Voir Prix & Stock", "primary")
-        btn_voir_prix.clicked.connect(self.voir_prix_stock)
-        actions_layout.addWidget(btn_voir_prix)
-
-        actions_layout.addStretch()
+        # Barre de statut
+        status_layout = QHBoxLayout()
+        status_layout.setSpacing(DesignSystem.SPACING_SM)
 
         self.label_results = ModernLabel("", "secondary")
-        actions_layout.addWidget(self.label_results)
+        status_layout.addWidget(self.label_results)
 
-        layout.addLayout(actions_layout)
+        status_layout.addStretch()
+
+        # Info prix/stock
+        info_prix = ModernLabel("ℹ️ Prix/Stock : Configuration requise", "secondary")
+        info_prix.setToolTip(
+            "Pour afficher les prix et stocks, configurez les identifiants\n"
+            "utilisateur Sonepar dans sonepar_config.py:\n"
+            "- user_id\n"
+            "- user_password"
+        )
+        status_layout.addWidget(info_prix)
+
+        layout.addLayout(status_layout)
 
     def update_catalog_info(self):
         """Met à jour l'info du catalogue"""
@@ -274,38 +282,20 @@ class RechercheSoneParWidget(QWidget):
             item_pack = QTableWidgetItem(str(produit.packaging))
             item_unit = QTableWidgetItem(produit.unit)
 
+            # Prix et Stock (non disponibles sans authentification)
+            item_prix = QTableWidgetItem("-")
+            item_stock = QTableWidgetItem("-")
+            item_prix.setToolTip("Configuration requise")
+            item_stock.setToolTip("Configuration requise")
+
             self.table.setItem(row, 0, item_ref)
             self.table.setItem(row, 1, item_desc)
             self.table.setItem(row, 2, item_brand)
             self.table.setItem(row, 3, item_ean)
             self.table.setItem(row, 4, item_pack)
             self.table.setItem(row, 5, item_unit)
-
-    def voir_prix_stock(self):
-        """Affiche les prix et stock du produit sélectionné"""
-        selected_items = self.table.selectedItems()
-
-        if not selected_items:
-            QMessageBox.warning(self, "Aucune sélection", "Veuillez sélectionner un produit.")
-            return
-
-        produit = self.table.item(selected_items[0].row(), 0).data(Qt.ItemDataRole.UserRole)
-
-        try:
-            results = self.client.get_prices_and_stocks([produit.reference])
-
-            if results:
-                result = results[0]
-                self.afficher_details_produit(result)
-            else:
-                QMessageBox.information(
-                    self,
-                    "Aucune donnée",
-                    "Aucune information de prix ou stock disponible pour ce produit."
-                )
-
-        except Exception as e:
-            QMessageBox.critical(self, "Erreur", f"Erreur lors de la récupération : {str(e)}")
+            self.table.setItem(row, 6, item_prix)
+            self.table.setItem(row, 7, item_stock)
 
     def on_double_click(self):
         """Double-clic : émet le signal de sélection"""
@@ -313,43 +303,6 @@ class RechercheSoneParWidget(QWidget):
         if selected_items:
             produit = self.table.item(selected_items[0].row(), 0).data(Qt.ItemDataRole.UserRole)
             self.produit_selectionne.emit(produit)
-
-    def afficher_details_produit(self, produit_pricing: ProductWithPricing):
-        """Affiche les détails d'un produit avec prix et stock"""
-        produit = produit_pricing.product
-        price = produit_pricing.price
-        stock = produit_pricing.stock
-
-        details = f"""
-<h3>{produit.description}</h3>
-<p><b>Référence:</b> {produit.reference}<br>
-<b>Marque:</b> {produit.brand.name}<br>
-<b>EAN:</b> {produit.ean}</p>
-"""
-
-        if price:
-            details += f"""
-<h4>Prix</h4>
-<p><b>Prix net:</b> {price.net_price:.2f} {price.currency}<br>
-<b>Prix brut:</b> {price.gross_price:.2f} {price.currency}<br>
-<b>Remise:</b> {price.discount_rate:.1f}%<br>
-<b>Unité:</b> {price.unit}</p>
-"""
-
-        if stock:
-            details += f"""
-<h4>Stock</h4>
-<p><b>Quantité disponible:</b> {stock.quantity}<br>
-<b>Type:</b> {stock.stock_type.value}<br>
-<b>Emplacement:</b> {stock.location or 'Non spécifié'}</p>
-"""
-
-        msg = QMessageBox(self)
-        msg.setWindowTitle("Détails du produit")
-        msg.setTextFormat(Qt.TextFormat.RichText)
-        msg.setText(details)
-        msg.setIcon(QMessageBox.Icon.Information)
-        msg.exec()
 
 
 class CreerCommandeSoneParDialog(ResponsiveDialog):
