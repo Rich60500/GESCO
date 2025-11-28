@@ -130,11 +130,13 @@ class TiersModule(QWidget):
         header.setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)  # Ville
         header.setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)  # SIRET
         header.setSectionResizeMode(5, QHeaderView.ResizeMode.ResizeToContents)  # Contacts
-        header.setSectionResizeMode(6, QHeaderView.ResizeMode.ResizeToContents)  # Actions
+        header.setSectionResizeMode(6, QHeaderView.ResizeMode.Fixed)  # Actions - largeur fixe
+        header.resizeSection(6, 480)  # Largeur pour 4 boutons
 
         self.table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
         self.table.setSelectionMode(QTableWidget.SelectionMode.SingleSelection)
         self.table.verticalHeader().setVisible(False)
+        self.table.verticalHeader().setDefaultSectionSize(48)  # Hauteur des lignes
 
         card_layout.addWidget(self.table)
 
@@ -240,71 +242,31 @@ class TiersModule(QWidget):
             # Boutons d'actions
             actions_widget = QWidget()
             actions_layout = QHBoxLayout(actions_widget)
-            actions_layout.setContentsMargins(4, 4, 4, 4)
-            actions_layout.setSpacing(4)
+            actions_layout.setContentsMargins(8, 4, 8, 4)
+            actions_layout.setSpacing(6)
 
             # Bouton Modifier
-            btn_edit = QPushButton("✏️")
-            btn_edit.setFixedSize(32, 32)
+            btn_edit = ModernButton("Modifier", "secondary")
+            btn_edit.setFixedHeight(32)
             btn_edit.clicked.connect(lambda checked, c=company: self.modifier_tiers(c))
-            btn_edit.setStyleSheet(f"""
-                QPushButton {{
-                    background-color: {DesignSystem.SURFACE_ELEVATED};
-                    border: none;
-                    border-radius: {DesignSystem.RADIUS_SM}px;
-                }}
-                QPushButton:hover {{
-                    background-color: {DesignSystem.ACCENT_BLUE};
-                }}
-            """)
             actions_layout.addWidget(btn_edit)
 
             # Bouton Contacts
-            btn_contacts = QPushButton("👥")
-            btn_contacts.setFixedSize(32, 32)
+            btn_contacts = ModernButton("Contacts", "success")
+            btn_contacts.setFixedHeight(32)
             btn_contacts.clicked.connect(lambda checked, c=company: self.gerer_contacts(c))
-            btn_contacts.setStyleSheet(f"""
-                QPushButton {{
-                    background-color: {DesignSystem.SURFACE_ELEVATED};
-                    border: none;
-                    border-radius: {DesignSystem.RADIUS_SM}px;
-                }}
-                QPushButton:hover {{
-                    background-color: {DesignSystem.SUCCESS_GREEN};
-                }}
-            """)
             actions_layout.addWidget(btn_contacts)
 
             # Bouton Adresses
-            btn_addresses = QPushButton("📍")
-            btn_addresses.setFixedSize(32, 32)
+            btn_addresses = ModernButton("Adresses", "warning")
+            btn_addresses.setFixedHeight(32)
             btn_addresses.clicked.connect(lambda checked, c=company: self.gerer_adresses(c))
-            btn_addresses.setStyleSheet(f"""
-                QPushButton {{
-                    background-color: {DesignSystem.SURFACE_ELEVATED};
-                    border: none;
-                    border-radius: {DesignSystem.RADIUS_SM}px;
-                }}
-                QPushButton:hover {{
-                    background-color: {DesignSystem.WARNING_ORANGE};
-                }}
-            """)
             actions_layout.addWidget(btn_addresses)
 
             # Bouton Supprimer
-            btn_delete = QPushButton("🗑️")
-            btn_delete.setFixedSize(32, 32)
+            btn_delete = ModernButton("Supprimer", "danger")
+            btn_delete.setFixedHeight(32)
             btn_delete.clicked.connect(lambda checked, c=company: self.supprimer_tiers(c))
-            btn_delete.setStyleSheet(f"""
-                QPushButton {{
-                    background-color: {DesignSystem.SURFACE_ELEVATED};
-                    border: none;
-                    border-radius: {DesignSystem.RADIUS_SM}px;
-                }}
-                QPushButton:hover {{
-                    background-color: {DesignSystem.ERROR_RED};
-                }}
-            """)
             actions_layout.addWidget(btn_delete)
 
             self.table.setCellWidget(row, 6, actions_widget)

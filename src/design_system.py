@@ -228,6 +228,10 @@ class ModernButton(QPushButton):
             bg_color = DesignSystem.SUCCESS_GREEN
             text_color = "white"
             hover_bg = "#2DA84E"
+        elif style == "warning":
+            bg_color = DesignSystem.WARNING_ORANGE
+            text_color = "white"
+            hover_bg = "#E68A00"
         elif style == "danger":
             bg_color = DesignSystem.ERROR_RED
             text_color = "white"
