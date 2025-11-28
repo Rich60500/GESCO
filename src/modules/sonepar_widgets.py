@@ -140,15 +140,20 @@ class RechercheSoneParWidget(QWidget):
 
         status_layout.addStretch()
 
-        # Info prix/stock
-        info_prix = ModernLabel("ℹ️ Prix/Stock : Configuration requise", "secondary")
-        info_prix.setToolTip(
-            "Pour afficher les prix et stocks, configurez les identifiants\n"
-            "utilisateur Sonepar dans sonepar_config.py:\n"
-            "- user_id\n"
-            "- user_password"
-        )
-        status_layout.addWidget(info_prix)
+        # Info prix/stock (vérifier si configuré)
+        auth_configured = bool(self.client.config.user_id and self.client.config.user_password)
+        if auth_configured:
+            self.label_prix_stock = ModernLabel("✅ Prix/Stock : Actif", "secondary")
+            self.label_prix_stock.setToolTip("Authentification configurée - Les prix et stocks s'affichent automatiquement")
+        else:
+            self.label_prix_stock = ModernLabel("ℹ️ Prix/Stock : Configuration requise", "secondary")
+            self.label_prix_stock.setToolTip(
+                "Pour afficher les prix et stocks, configurez les identifiants\n"
+                "utilisateur Sonepar dans sonepar_config.py:\n"
+                "- user_id\n"
+                "- user_password"
+            )
+        status_layout.addWidget(self.label_prix_stock)
 
         layout.addLayout(status_layout)
 
@@ -269,6 +274,30 @@ class RechercheSoneParWidget(QWidget):
         """Affiche les produits dans le tableau"""
         self.table.setRowCount(0)
 
+        # Vérifier si l'authentification est configurée pour charger prix/stocks
+        auth_configured = bool(self.client.config.user_id and self.client.config.user_password)
+        prix_stocks_data = {}
+
+        # Charger les prix et stocks si authentification disponible
+        if auth_configured and produits:
+            try:
+                # Limiter à 20 produits max pour éviter les délais (API limite à 100)
+                product_ids = [p.id for p in produits[:20] if p.id]
+
+                if product_ids:
+                    self.label_prix_stock.setText("🔄 Chargement prix/stocks...")
+                    pricing_results = self.client.get_prices_and_stocks(product_ids)
+
+                    # Créer un dictionnaire pour accès rapide
+                    for pricing in pricing_results:
+                        prix_stocks_data[pricing.product.id] = pricing
+
+                    self.label_prix_stock.setText("✅ Prix/Stock : Actif")
+            except Exception as e:
+                # En cas d'erreur, continuer sans prix/stocks
+                self.label_prix_stock.setText(f"⚠️ Erreur prix/stock : {str(e)[:30]}...")
+
+        # Afficher les produits
         for produit in produits:
             row = self.table.rowCount()
             self.table.insertRow(row)
@@ -282,11 +311,26 @@ class RechercheSoneParWidget(QWidget):
             item_pack = QTableWidgetItem(str(produit.packaging))
             item_unit = QTableWidgetItem(produit.unit)
 
-            # Prix et Stock (non disponibles sans authentification)
-            item_prix = QTableWidgetItem("-")
-            item_stock = QTableWidgetItem("-")
-            item_prix.setToolTip("Configuration requise")
-            item_stock.setToolTip("Configuration requise")
+            # Prix et Stock
+            pricing = prix_stocks_data.get(produit.id)
+            if pricing and pricing.price:
+                item_prix = QTableWidgetItem(f"{pricing.price.net_price:.2f} €")
+                item_prix.setToolTip(f"Brut: {pricing.price.gross_price:.2f} € | Unité: {pricing.price.unit}")
+            else:
+                item_prix = QTableWidgetItem("-")
+                item_prix.setToolTip("Non disponible" if auth_configured else "Configuration requise")
+
+            if pricing and pricing.stock:
+                item_stock = QTableWidgetItem(f"{pricing.stock.quantity}")
+                item_stock.setToolTip(f"Disponible : {pricing.stock.location}")
+                # Colorer en vert si dispo, rouge si rupture
+                if pricing.stock.quantity > 0:
+                    item_stock.setForeground(QColor(DesignSystem.SUCCESS_GREEN))
+                else:
+                    item_stock.setForeground(QColor(DesignSystem.ERROR_RED))
+            else:
+                item_stock = QTableWidgetItem("-")
+                item_stock.setToolTip("Non disponible" if auth_configured else "Configuration requise")
 
             self.table.setItem(row, 0, item_ref)
             self.table.setItem(row, 1, item_desc)

@@ -18,10 +18,10 @@ class SoneParConfig:
     facility_id: str = ""  # ID de l'agence (optionnel)
     distribution_center_id: str = ""  # ID du centre de distribution (optionnel)
 
-    # Authentification utilisateur (à configurer)
-    # Ces identifiants doivent être encodés en Base64
-    user_id: str = ""  # TODO: Remplir avec l'identifiant utilisateur Sonepar
-    user_password: str = ""  # TODO: Remplir avec le mot de passe Sonepar
+    # Authentification utilisateur (DENIS EURL)
+    # Ces identifiants seront automatiquement encodés en Base64
+    user_id: str = "contact@ets-denis.com"
+    user_password: str = "Alemaxanach@60"
 
     # URLs des environnements
     base_url_test: str = "https://apitst.sonepar.fr/api"
