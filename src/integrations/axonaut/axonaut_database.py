@@ -180,8 +180,8 @@ class AxonautDatabase:
                 """, (
                     company.name, company.creation_date, company.address_contact_name,
                     company.address_street, company.address_zip_code, company.address_city,
-                    company.address_country, company.comments, int(company.is_prospect),
-                    int(company.is_customer), int(company.isB2C), company.currency,
+                    company.address_country, company.comments, int(company.is_prospect or False),
+                    int(company.is_customer or False), int(company.isB2C or False), company.currency,
                     company.language, company.thirdparty_code, company.supplier_thirdparty_code,
                     company.intracommunity_number, company.iban, company.bic, company.siret,
                     company.internal_id, business_manager_data, custom_fields,
@@ -202,8 +202,8 @@ class AxonautDatabase:
                 """, (
                     company.id, company.name, company.creation_date, company.address_contact_name,
                     company.address_street, company.address_zip_code, company.address_city,
-                    company.address_country, company.comments, int(company.is_prospect),
-                    int(company.is_customer), int(company.isB2C), company.currency,
+                    company.address_country, company.comments, int(company.is_prospect or False),
+                    int(company.is_customer or False), int(company.isB2C or False), company.currency,
                     company.language, company.thirdparty_code, company.supplier_thirdparty_code,
                     company.intracommunity_number, company.iban, company.bic, company.siret,
                     company.internal_id, business_manager_data, custom_fields,
@@ -222,8 +222,8 @@ class AxonautDatabase:
             """, (
                 company.name, company.address_contact_name, company.address_street,
                 company.address_zip_code, company.address_city, company.address_country,
-                company.comments, int(company.is_prospect), int(company.is_customer),
-                int(company.isB2C), company.currency, company.language,
+                company.comments, int(company.is_prospect or False), int(company.is_customer or False),
+                int(company.isB2C or False), company.currency, company.language,
                 company.thirdparty_code, company.intracommunity_number, company.iban,
                 company.bic, company.siret, company.internal_id, custom_fields
             ))
@@ -235,10 +235,8 @@ class AxonautDatabase:
         # Sauvegarder les employés
         if company.employees:
             for employee in company.employees:
-                employee.company_id = local_id
-                if company.id:
-                    employee.company_id = company.id  # Axonaut company ID
-                self.save_employee(employee)
+                # Utiliser l'ID local pour la relation company_id
+                self.save_employee(employee, company_local_id=local_id)
 
         return local_id
 
@@ -363,12 +361,13 @@ class AxonautDatabase:
 
     # ==================== EMPLOYEES ====================
 
-    def save_employee(self, employee: Employee) -> int:
+    def save_employee(self, employee: Employee, company_local_id: Optional[int] = None) -> int:
         """
         Sauvegarde ou met à jour un employé
 
         Args:
             employee: Objet Employee
+            company_local_id: ID local de l'entreprise (si différent de employee.company_id)
 
         Returns:
             ID local de l'employé
@@ -378,11 +377,15 @@ class AxonautDatabase:
 
         custom_fields = json.dumps(employee.custom_fields) if employee.custom_fields else None
 
+        # Utiliser company_local_id si fourni, sinon employee.company_id
+        local_company_id = company_local_id if company_local_id is not None else employee.company_id
+
         if employee.id:
             cursor.execute("SELECT id FROM employees WHERE axonaut_id = ?", (employee.id,))
             existing = cursor.fetchone()
 
             if existing:
+                # Mise à jour - ne pas changer company_id
                 cursor.execute("""
                     UPDATE employees SET
                         gender = ?, firstname = ?, lastname = ?, email = ?,
@@ -393,34 +396,36 @@ class AxonautDatabase:
                 """, (
                     employee.gender, employee.firstname, employee.lastname, employee.email,
                     employee.phone_number, employee.cellphone_number, employee.job,
-                    int(employee.is_billing_contact), custom_fields,
+                    int(employee.is_billing_contact or False), custom_fields,
                     datetime.now().isoformat(), employee.id
                 ))
                 local_id = existing['id']
             else:
+                # Insertion avec ID Axonaut
                 cursor.execute("""
                     INSERT INTO employees (
-                        axonaut_id, company_id, gender, firstname, lastname, email,
+                        axonaut_id, company_id, axonaut_company_id, gender, firstname, lastname, email,
                         phone_number, cellphone_number, job, is_billing_contact,
                         custom_fields, last_sync
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, (
-                    employee.id, employee.company_id, employee.gender, employee.firstname,
+                    employee.id, local_company_id, employee.company_id, employee.gender, employee.firstname,
                     employee.lastname, employee.email, employee.phone_number,
-                    employee.cellphone_number, employee.job, int(employee.is_billing_contact),
+                    employee.cellphone_number, employee.job, int(employee.is_billing_contact or False),
                     custom_fields, datetime.now().isoformat()
                 ))
                 local_id = cursor.lastrowid
         else:
+            # Nouvelle employee sans ID Axonaut
             cursor.execute("""
                 INSERT INTO employees (
                     company_id, gender, firstname, lastname, email, phone_number,
                     cellphone_number, job, is_billing_contact, custom_fields
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """, (
-                employee.company_id, employee.gender, employee.firstname, employee.lastname,
+                local_company_id, employee.gender, employee.firstname, employee.lastname,
                 employee.email, employee.phone_number, employee.cellphone_number,
-                employee.job, int(employee.is_billing_contact), custom_fields
+                employee.job, int(employee.is_billing_contact or False), custom_fields
             ))
             local_id = cursor.lastrowid
 
