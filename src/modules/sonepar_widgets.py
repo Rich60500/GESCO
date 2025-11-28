@@ -68,9 +68,9 @@ class RechercheSoneParWidget(QWidget):
         layout.addLayout(search_layout)
 
         # Info catalogue
-        self.update_catalog_info()
         self.label_catalog_info = ModernLabel("", "secondary")
         layout.addWidget(self.label_catalog_info)
+        self.update_catalog_info()
 
         # Info
         info_label = ModernLabel(
