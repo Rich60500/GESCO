@@ -405,14 +405,12 @@ class TiersModule(QWidget):
                 if company.id:
                     # Supprimer dans Axonaut
                     self.axonaut_client.delete_company(company.id)
-
-                # Supprimer localement (récupérer l'ID local)
-                companies = self.axonaut_db.get_companies()
-                for c in companies:
-                    if c.id == company.id:
-                        # On a l'ID Axonaut, maintenant on doit trouver l'ID local
-                        # Pour simplifier, on recharge tout après suppression
-                        pass
+                    # Supprimer localement par ID Axonaut
+                    self.axonaut_db.delete_company_by_axonaut_id(company.id)
+                else:
+                    # Pas d'ID Axonaut, suppression locale uniquement
+                    # (ne devrait pas arriver normalement)
+                    pass
 
                 QMessageBox.information(
                     self,
@@ -740,9 +738,6 @@ class ContactsDialog(ResponsiveDialog):
         layout.addWidget(self.table)
 
         self.content_layout.addLayout(layout)
-
-        # Masquer les boutons OK/Annuler du dialogue standard
-        self.button_box.hide()
 
         # Ajouter un bouton Fermer
         btn_close = ModernButton("Fermer", "secondary")
@@ -1093,9 +1088,6 @@ class AddressesDialog(ResponsiveDialog):
         layout.addWidget(self.table)
 
         self.content_layout.addLayout(layout)
-
-        # Masquer les boutons OK/Annuler du dialogue standard
-        self.button_box.hide()
 
         # Ajouter un bouton Fermer
         btn_close = ModernButton("Fermer", "secondary")

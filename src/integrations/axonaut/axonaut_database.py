@@ -475,10 +475,18 @@ class AxonautDatabase:
         )
 
     def delete_company(self, company_id: int):
-        """Supprime une entreprise et ses employés (cascade)"""
+        """Supprime une entreprise et ses employés (cascade) par ID local"""
         conn = self.get_connection()
         cursor = conn.cursor()
         cursor.execute("DELETE FROM companies WHERE id = ?", (company_id,))
+        conn.commit()
+        conn.close()
+
+    def delete_company_by_axonaut_id(self, axonaut_id: int):
+        """Supprime une entreprise par son ID Axonaut"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM companies WHERE axonaut_id = ?", (axonaut_id,))
         conn.commit()
         conn.close()
 
