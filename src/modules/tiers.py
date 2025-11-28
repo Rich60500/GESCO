@@ -884,11 +884,52 @@ class ContactsDialog(ResponsiveDialog):
                 self.charger_contacts()
 
             except Exception as e:
-                QMessageBox.critical(
-                    self,
-                    "Erreur",
-                    f"Impossible d'ajouter le contact:\n{str(e)}"
-                )
+                error_msg = str(e)
+
+                # Détection erreur B2C
+                if "can't add another employee to a B2C company" in error_msg or "B2C" in error_msg:
+                    reply = QMessageBox.question(
+                        self,
+                        "Entreprise B2C",
+                        "⚠️ Cette entreprise est marquée comme B2C (particulier).\n\n"
+                        "Les entreprises B2C ne peuvent pas avoir de contacts multiples dans Axonaut.\n\n"
+                        "Voulez-vous convertir cette entreprise en B2B pour pouvoir ajouter des contacts ?",
+                        QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+                    )
+
+                    if reply == QMessageBox.StandardButton.Yes:
+                        try:
+                            # Désactiver le flag B2C
+                            from ...integrations.axonaut.axonaut_models import Company
+                            company_update = Company(
+                                id=self.company.id,
+                                name=self.company.name,
+                                isB2C=False  # Passer en B2B
+                            )
+                            self.client.update_company(self.company.id, company_update)
+                            self.company.isB2C = False
+
+                            QMessageBox.information(
+                                self,
+                                "Conversion réussie",
+                                "L'entreprise a été convertie en B2B.\n\nVous pouvez maintenant ajouter des contacts."
+                            )
+
+                            # Relancer l'ajout du contact
+                            self.nouveau_contact()
+
+                        except Exception as e2:
+                            QMessageBox.critical(
+                                self,
+                                "Erreur de conversion",
+                                f"Impossible de convertir l'entreprise:\n{str(e2)}"
+                            )
+                else:
+                    QMessageBox.critical(
+                        self,
+                        "Erreur",
+                        f"Impossible d'ajouter le contact:\n{error_msg}"
+                    )
 
     def modifier_contact(self, employee: Employee):
         """Modifie un contact"""

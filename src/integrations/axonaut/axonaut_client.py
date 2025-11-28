@@ -246,9 +246,6 @@ class AxonautClient:
         """
         Crée une nouvelle adresse de chantier pour une entreprise
 
-        Note: L'API Axonaut ne fournit pas d'endpoint POST direct pour les adresses.
-        On doit faire un PATCH de la company avec toutes ses adresses.
-
         Args:
             company_id: ID de l'entreprise
             address: Objet Address à créer
@@ -256,49 +253,12 @@ class AxonautClient:
         Returns:
             Adresse créée avec son ID Axonaut
         """
-        # Récupérer toutes les adresses actuelles
-        current_addresses = self.get_company_addresses(company_id)
+        data = address.to_dict(for_api=True)
+        data['company_id'] = company_id  # Ajouter l'ID de la company
 
-        # Préparer la liste complète d'adresses pour le PATCH
-        addresses_list = []
-        for addr in current_addresses:
-            addresses_list.append(addr.to_dict(for_api=True))
-
-        # Ajouter la nouvelle adresse
-        address_data = address.to_dict(for_api=True)
-        addresses_list.append(address_data)
-
-        # PATCH la company avec la liste complète d'adresses
-        patch_data = {
-            'addresses': addresses_list
-        }
-
-        self._request('PATCH', f'/companies/{company_id}', json=patch_data)
-
-        # Re-récupérer les adresses pour trouver la nouvelle avec son ID
-        updated_addresses = self.get_company_addresses(company_id)
-
-        # Trouver la nouvelle adresse (celle qui n'était pas dans la liste précédente)
-        previous_ids = {a.id for a in current_addresses if a.id}
-        new_address = None
-
-        for addr in updated_addresses:
-            if addr.id and addr.id not in previous_ids:
-                new_address = addr
-                break
-
-        # Si on ne trouve pas par ID, chercher par nom
-        if not new_address:
-            for addr in updated_addresses:
-                if addr.name == address.name and addr.street == address.street:
-                    new_address = addr
-                    break
-
-        # Fallback: prendre la dernière adresse
-        if not new_address and updated_addresses:
-            new_address = updated_addresses[-1]
-
-        return new_address if new_address else address
+        response = self._request('POST', '/addresses', json=data)
+        result = response.json()
+        return Address.from_dict(result)
 
     def update_address(self, address_id: int, address: Address) -> Address:
         """
