@@ -693,9 +693,11 @@ class ContactsDialog(ResponsiveDialog):
         header.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
         header.setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
         header.setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)
-        header.setSectionResizeMode(5, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(5, QHeaderView.ResizeMode.Fixed)
+        header.resizeSection(5, 240)  # Largeur pour 2 boutons
 
         self.table.verticalHeader().setVisible(False)
+        self.table.verticalHeader().setDefaultSectionSize(40)  # Hauteur des lignes
 
         layout.addWidget(self.table)
 
@@ -735,37 +737,17 @@ class ContactsDialog(ResponsiveDialog):
             # Actions
             actions_widget = QWidget()
             actions_layout = QHBoxLayout(actions_widget)
-            actions_layout.setContentsMargins(4, 4, 4, 4)
-            actions_layout.setSpacing(4)
+            actions_layout.setContentsMargins(6, 4, 6, 4)
+            actions_layout.setSpacing(6)
 
-            btn_edit = QPushButton("✏️")
-            btn_edit.setFixedSize(32, 32)
+            btn_edit = ModernButton("Modifier", "secondary")
+            btn_edit.setFixedHeight(28)
             btn_edit.clicked.connect(lambda checked, e=employee: self.modifier_contact(e))
-            btn_edit.setStyleSheet(f"""
-                QPushButton {{
-                    background-color: {DesignSystem.SURFACE_ELEVATED};
-                    border: none;
-                    border-radius: {DesignSystem.RADIUS_SM}px;
-                }}
-                QPushButton:hover {{
-                    background-color: {DesignSystem.ACCENT_BLUE};
-                }}
-            """)
             actions_layout.addWidget(btn_edit)
 
-            btn_delete = QPushButton("🗑️")
-            btn_delete.setFixedSize(32, 32)
+            btn_delete = ModernButton("Supprimer", "danger")
+            btn_delete.setFixedHeight(28)
             btn_delete.clicked.connect(lambda checked, e=employee: self.supprimer_contact(e))
-            btn_delete.setStyleSheet(f"""
-                QPushButton {{
-                    background-color: {DesignSystem.SURFACE_ELEVATED};
-                    border: none;
-                    border-radius: {DesignSystem.RADIUS_SM}px;
-                }}
-                QPushButton:hover {{
-                    background-color: {DesignSystem.ERROR_RED};
-                }}
-            """)
             actions_layout.addWidget(btn_delete)
 
             self.table.setCellWidget(row, 5, actions_widget)
@@ -1043,9 +1025,11 @@ class AddressesDialog(ResponsiveDialog):
         header.setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
         header.setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
         header.setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)
-        header.setSectionResizeMode(5, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(5, QHeaderView.ResizeMode.Fixed)
+        header.resizeSection(5, 240)  # Largeur pour 2 boutons
 
         self.table.verticalHeader().setVisible(False)
+        self.table.verticalHeader().setDefaultSectionSize(40)  # Hauteur des lignes
 
         layout.addWidget(self.table)
 
@@ -1090,37 +1074,17 @@ class AddressesDialog(ResponsiveDialog):
                 # Actions
                 actions_widget = QWidget()
                 actions_layout = QHBoxLayout(actions_widget)
-                actions_layout.setContentsMargins(4, 4, 4, 4)
-                actions_layout.setSpacing(4)
+                actions_layout.setContentsMargins(6, 4, 6, 4)
+                actions_layout.setSpacing(6)
 
-                btn_edit = QPushButton("✏️")
-                btn_edit.setFixedSize(32, 32)
+                btn_edit = ModernButton("Modifier", "secondary")
+                btn_edit.setFixedHeight(28)
                 btn_edit.clicked.connect(lambda checked, a=address: self.modifier_adresse(a))
-                btn_edit.setStyleSheet(f"""
-                    QPushButton {{
-                        background-color: {DesignSystem.SURFACE_ELEVATED};
-                        border: none;
-                        border-radius: {DesignSystem.RADIUS_SM}px;
-                    }}
-                    QPushButton:hover {{
-                        background-color: {DesignSystem.ACCENT_BLUE};
-                    }}
-                """)
                 actions_layout.addWidget(btn_edit)
 
-                btn_delete = QPushButton("🗑️")
-                btn_delete.setFixedSize(32, 32)
+                btn_delete = ModernButton("Supprimer", "danger")
+                btn_delete.setFixedHeight(28)
                 btn_delete.clicked.connect(lambda checked, a=address: self.supprimer_adresse(a))
-                btn_delete.setStyleSheet(f"""
-                    QPushButton {{
-                        background-color: {DesignSystem.SURFACE_ELEVATED};
-                        border: none;
-                        border-radius: {DesignSystem.RADIUS_SM}px;
-                    }}
-                    QPushButton:hover {{
-                        background-color: {DesignSystem.ERROR_RED};
-                    }}
-                """)
                 actions_layout.addWidget(btn_delete)
 
                 self.table.setCellWidget(row, 5, actions_widget)
