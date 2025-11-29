@@ -1,0 +1,11 @@
+# GESCO v4.8.0 - Gestion de Chantiers
+# Dépendances Python
+
+# Interface graphique Qt
+PySide6>=6.5.0
+
+# Manipulation de données
+pandas>=2.0.0
+
+# Requêtes HTTP (pour l'API Axonaut)
+requests>=2.31.0
